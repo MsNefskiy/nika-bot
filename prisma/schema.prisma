@@ -11,36 +11,44 @@ model User {
   id            String   @id @default(uuid())
   discordId     String   @unique
   username      String
-  reprimands    Reprimand[]
-  tasks         Task[]
   points        Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-}
-
-model Reprimand {
-  id        String   @id @default(uuid())
-  reason    String
-  givenBy   String
-  createdAt DateTime @default(now())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-}
-
-model Task {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  status      String   @default("active") // active, completed, cancelled
-  dueDate     DateTime?
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
+  
+  // Связи с трибунами
+  tribunesCreated  Tribune[]        @relation("TribuneCreator")
+  tribuneHistory   TribuneHistory[] @relation("HostHistory")
 }
 
 model Tribune {
-  id        String   @id @default(uuid())
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  type        String   // Синяя кнопка, Быстрые свидания и т.д.
+  dateTime    String   // Запланированное время строкой
+  status      String   @default("ACTIVE") // ACTIVE, COMPLETED
+  creatorId   String
+  creator     User     @relation("TribuneCreator", fields: [creatorId], references: [discordId])
+  
+  // Привязка к сообщению для живых обновлений
+  messageId   String?
+  channelId   String?
+
+  // Участники на местах
+  slot1_1     String?
+  slot1_2     String?
+  slot2_1     String?
+  slot2_2     String?
+
+  createdAt   DateTime @default(now())
+}
+
+model TribuneHistory {
+  id          String   @id @default(uuid())
+  type        String
+  startTime   String
+  closedAt    DateTime @default(now())
+  hostId      String   // ID ведущего (того, кто завершил)
+  host        User     @relation("HostHistory", fields: [hostId], references: [discordId])
+  
+  // Кто был на трибуне
+  participants String? 
 }
