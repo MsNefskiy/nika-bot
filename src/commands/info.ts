@@ -23,14 +23,18 @@ export default {
     async execute(interaction: ChatInputCommandInteraction, client: MyClient) {
         const targetUser = interaction.options.getUser('user')!;
 
+        // Получаем дату вступления на сервер
+        const targetMember = await interaction.guild?.members.fetch(targetUser.id).catch(() => null);
+        const joinedAt = targetMember?.joinedAt || new Date();
+
         // Находим или создаем пользователя в БД
         const dbUser = await prisma.user.upsert({
             where: { discordId: targetUser.id },
-            update: { username: targetUser.username },
+            update: { username: targetUser.username, joinedAt },
             create: { 
                 discordId: targetUser.id, 
                 username: targetUser.username,
-                joinedAt: new Date()
+                joinedAt
             }
         });
 

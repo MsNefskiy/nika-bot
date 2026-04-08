@@ -22,14 +22,18 @@ export default {
         const targetUser = interaction.user;
         const curatorStatus = isCurator(targetUser.id);
 
+        // Получаем дату вступления на сервер
+        const member = interaction.member as any; // GuildMember
+        const joinedAt = member?.joinedAt || new Date();
+
         // Находим или создаем пользователя в БД
         const dbUser = await prisma.user.upsert({
             where: { discordId: targetUser.id },
-            update: { username: targetUser.username },
+            update: { username: targetUser.username, joinedAt },
             create: { 
                 discordId: targetUser.id, 
                 username: targetUser.username,
-                joinedAt: new Date()
+                joinedAt
             }
         });
 
