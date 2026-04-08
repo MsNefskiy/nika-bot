@@ -114,19 +114,12 @@ export default {
 // --- МАГАЗИН ---
 
 async function handleShopView(interaction: any) {
-    const embed = new EmbedBuilder()
-        .setTitle('🛒 Магазин «Звездная Лавка»')
-        .setColor('#FFD700')
-        .setDescription('Покупайте уникальные возможности за Ваши звезды! Все товары выдаются кураторами вручную после покупки.')
-        .setThumbnail('https://i.imgur.com/8Qp6u8f.png'); // Замените на лого если есть
+    if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+    }
 
-    shopItems.forEach(item => {
-        embed.addFields({
-            name: `${item.name} — ✨ ${item.price}`,
-            value: `>>> ${item.desc}`,
-            inline: true
-        });
-    });
+    const buffer = await CanvasHelper.drawShopCard(shopItems);
+    const attachment = new AttachmentBuilder(buffer, { name: 'shop.png' });
 
     const select = new StringSelectMenuBuilder()
         .setCustomId('select_shop_item')
@@ -137,10 +130,10 @@ async function handleShopView(interaction: any) {
                 .setValue(item.id)
         ));
 
-    await interaction.reply({ 
-        embeds: [embed], 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], 
-        ephemeral: true 
+    await interaction.editReply({ 
+        files: [attachment], 
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+        content: ''
     });
 }
 
@@ -164,7 +157,7 @@ async function handleShopSelection(interaction: any, itemId: string) {
             .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.update({ embeds: [embed], components: [row] });
+    await interaction.update({ embeds: [embed], components: [row], files: [] });
 }
 
 async function processPurchase(interaction: any, itemId: string, client: MyClient) {
@@ -180,7 +173,6 @@ async function processPurchase(interaction: any, itemId: string, client: MyClien
         });
     }
 
-    // Списание
     await prisma.user.update({
         where: { discordId: interaction.user.id },
         data: { stars: { decrement: item.price } }
@@ -192,7 +184,6 @@ async function processPurchase(interaction: any, itemId: string, client: MyClien
         components: [] 
     });
 
-    // Уведомление кураторам
     const notifyEmbed = new EmbedBuilder()
         .setTitle('🛍️ Новая покупка в магазине!')
         .setColor('#ffd700')
@@ -205,264 +196,28 @@ async function processPurchase(interaction: any, itemId: string, client: MyClien
     }
 }
 
-// --- СИСТЕМА ВЫГОВОРОВ (АДМИН) ---
-
-async function initiateReprimandIssue(interaction: any) {
-    const users = await prisma.user.findMany({ take: 25, orderBy: { createdAt: 'desc' } });
-    if (users.length === 0) return interaction.reply({ content: 'В базе пока нет пользователей!', ephemeral: true });
-
-    const select = new StringSelectMenuBuilder()
-        .setCustomId('select_target_for_reprimand')
-        .setPlaceholder('Выберите пользователя из списка бота')
-        .addOptions(users.map(u => new StringSelectMenuOptionBuilder().setLabel(u.username).setValue(u.discordId)));
-
-    await interaction.reply({ 
-        content: '⚖️ Кому выдать выговор?', 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], 
-        ephemeral: true 
-    });
-}
-
-async function showReprimandModal(interaction: any, targetId: string) {
-    const modal = new ModalBuilder().setCustomId(`modal_issue_reprimand:${targetId}`).setTitle('Выдача выговора');
-    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-            .setCustomId('reprimand_reason')
-            .setLabel('Причина выговора')
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-    ));
-    await interaction.showModal(modal);
-}
-
-async function saveReprimand(interaction: any, targetId: string, reason: string, client: MyClient) {
-    await prisma.reprimand.create({
-        data: { userId: targetId, reason, authorId: interaction.user.id }
-    });
-
-    await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, ephemeral: true });
-
-    const target = await client.users.fetch(targetId).catch(() => null);
-    if (target) {
-        await target.send(`⚖️ **Вам выдан выговор!**\n>>> **Причина:** ${reason}\n**Автор:** <@${interaction.user.id}>`).catch(() => {});
-    }
-}
-
-async function initiateReprimandRemove(interaction: any) {
-    const users = await prisma.user.findMany({ take: 25, orderBy: { createdAt: 'desc' } });
-    const select = new StringSelectMenuBuilder()
-        .setCustomId('select_target_for_remove_reprimand')
-        .setPlaceholder('Выберите пользователя')
-        .addOptions(users.map(u => new StringSelectMenuOptionBuilder().setLabel(u.username).setValue(u.discordId)));
-
-    await interaction.reply({ 
-        content: '🛡️ С кого снять выговор?', 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], 
-        ephemeral: true 
-    });
-}
-
-async function showReprimandsToRemove(interaction: any, targetId: string) {
-    const reprimands = await prisma.reprimand.findMany({ where: { userId: targetId }, take: 25 });
-    if (reprimands.length === 0) return interaction.update({ content: 'У этого пользователя нет выговоров.', components: [] });
-
-    const select = new StringSelectMenuBuilder()
-        .setCustomId('select_reprimand_to_delete')
-        .setPlaceholder('Выберите выговор для удаления')
-        .addOptions(reprimands.map(r => new StringSelectMenuOptionBuilder().setLabel(r.reason.substring(0, 50)).setValue(r.id)));
-
-    await interaction.update({ 
-        content: `Список выговоров <@${targetId}>:`, 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
-    });
-}
-
-async function finalizeReprimandRemove(interaction: any, reprimandId: string, client: MyClient) {
-    const reprimand = await prisma.reprimand.findUnique({ where: { id: reprimandId } });
-    if (!reprimand) return interaction.update({ content: 'Выговор не найден.', components: [] });
-
-    await prisma.reprimand.delete({ where: { id: reprimandId } });
-    await interaction.update({ content: '✅ Выговор успешно снят!', components: [] });
-
-    const target = await client.users.fetch(reprimand.userId).catch(() => null);
-    if (target) {
-        await target.send(`🛡️ **С вас снят выговор!**\n>>> **Был за:** ${reprimand.reason}\n**Снял:** <@${interaction.user.id}>`).catch(() => {});
-    }
-}
-
-async function viewMyReprimands(interaction: any) {
-    const reprimands = await prisma.reprimand.findMany({ where: { userId: interaction.user.id }, orderBy: { createdAt: 'desc' } });
-    
-    const embed = new EmbedBuilder()
-        .setTitle('⚖️ Твои выговоры')
-        .setColor(reprimands.length > 0 ? '#ff0000' : '#00ff00')
-        .setDescription(reprimands.length > 0 ? `Всего нарушений: **${reprimands.length}**` : 'У тебя нет активных выговоров! 🎉');
-
-    reprimands.forEach((r, i) => {
-        embed.addFields({
-            name: `Выговор #${reprimands.length - i}`,
-            value: `>>> **Причина:** ${r.reason}\n**Выдал:** <@${r.authorId}>\n**Дата:** <t:${Math.floor(r.createdAt.getTime() / 1000)}:R>`,
-            inline: false
-        });
-    });
-
-    await interaction.reply({ embeds: [embed], ephemeral: true });
-}
-
-// --- СИСТЕМА ЗАДАНИЙ ---
-
-async function handleTasksView(interaction: any) {
-    const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
-    if (!user) return;
-    let taskIndex = user.currentTaskIndex;
-    let isTaskDone = user.isTaskDone;
-    let isTaskPending = user.isTaskPending;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const lastTaskDate = user.lastTaskDate ? new Date(user.lastTaskDate) : null;
-    if (lastTaskDate) lastTaskDate.setHours(0, 0, 0, 0);
-    if (!lastTaskDate || lastTaskDate.getTime() !== today.getTime()) {
-        taskIndex = Math.floor(Math.random() * tasks.length);
-        isTaskDone = false;
-        isTaskPending = false;
-        await prisma.user.update({ where: { discordId: interaction.user.id }, data: { currentTaskIndex: taskIndex, lastTaskDate: new Date(), isTaskDone: false, isTaskPending: false } });
-    }
-    const taskText = tasks[taskIndex!];
-    let statusText = '📝 Твое задание на сегодня:';
-    if (isTaskPending) statusText = '⏳ Задание на проверке у кураторов:';
-    if (isTaskDone) statusText = '✅ Ты уже выполнил задание на сегодня:';
-    const embed = new EmbedBuilder().setTitle('📅 Ежедневное задание').setDescription(`${statusText}\n\n>>> **${taskText}**`).setColor(isTaskDone ? '#00ff00' : (isTaskPending ? '#ffff00' : '#00ffff'));
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('submit_task').setLabel('Выполнено').setStyle(ButtonStyle.Success).setDisabled(isTaskDone || isTaskPending));
-    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-}
-
-async function submitTaskToCurators(interaction: any, client: MyClient) {
-    const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
-    if (!user || user.currentTaskIndex === null) return;
-    await prisma.user.update({ where: { discordId: interaction.user.id }, data: { isTaskPending: true } });
-    
-    const embed = new EmbedBuilder().setTitle('📢 Новое выполненное задание!').setDescription(`Пользователь <@${interaction.user.id}> утверждает, что выполнил задание:\n\n**${tasks[user.currentTaskIndex]}**`).setColor('#7289da');
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`approve_task_${interaction.user.id}`).setLabel('Да, принять').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_task_${interaction.user.id}`).setLabel('Нет, отклонить').setStyle(ButtonStyle.Danger));
-
-    for (const curatorId of CURATORS) {
-        const curator = await client.users.fetch(curatorId).catch(() => null);
-        if (curator) await curator.send({ embeds: [embed], components: [row] }).catch(() => {});
-    }
-
-    await interaction.update({ content: '✅ Задание отправлено на проверку кураторам!', embeds: [], components: [] });
-    setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-}
-
-async function approveTask(interaction: any, userId: string, client: MyClient) {
-    const user = await prisma.user.findUnique({ where: { discordId: userId } });
-    if (!user) return interaction.update({ content: 'Ошибка: пользователь не найден.', components: [] });
-    await prisma.user.update({ where: { discordId: userId }, data: { stars: { increment: 50 }, isTaskDone: true, isTaskPending: false } });
-    await interaction.update({ content: `✅ Задание <@${userId}> одобрено. +50 звезд начислено!`, components: [] });
-    const targetUser = await client.users.fetch(userId).catch(() => null);
-    if (targetUser) { await targetUser.send('🌟 Куратор одобрил твое задание! Тебе начислено **50 звезд**.').catch(() => {}); }
-}
-
-async function denyTask(interaction: any, userId: string, client: MyClient) {
-    await prisma.user.update({ where: { discordId: userId }, data: { isTaskPending: false } });
-    await interaction.update({ content: `❌ Задание <@${userId}> отклонено.`, components: [] });
-    const targetUser = await client.users.fetch(userId).catch(() => null);
-    if (targetUser) { await targetUser.send('❌ Твое задание было отклонено за несоответствие. Попробуй еще раз!').catch(() => {}); }
-}
-
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ТРИБУН ---
-
-async function renderTribuneView(interaction: any) {
-    const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!activeTribune) {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('create_event').setLabel('Создать событие').setStyle(ButtonStyle.Success));
-        return interaction.reply({ content: 'Активных событий нет.', components: [row], ephemeral: true });
-    }
-    await updateTribuneMessage(interaction);
-}
-
-async function updateTribuneMessage(interaction: any) {
-    const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!activeTribune) return;
-    const hostNames: any = {};
-    const slots = ['slot1_1', 'slot1_2', 'slot2_1', 'slot2_2'];
-    for (const s of slots) {
-        const id = (activeTribune as any)[s];
-        if (id) {
-            const member = await interaction.guild?.members.fetch(id).catch(() => null);
-            hostNames[s] = member ? member.user.username : 'Неизвестен';
-        } else {
-            hostNames[s] = null;
-        }
-    }
-    const buffer = await CanvasHelper.drawTribuneCard(activeTribune, hostNames);
-    const attachment = new AttachmentBuilder(buffer, { name: 'tribune.png' });
-    const rows = createTribuneButtons(activeTribune, interaction.user.id);
-    if (interaction.isButton() || interaction.isStringSelectMenu()) {
-        if (interaction.replied || interaction.deferred) { await interaction.editReply({ files: [attachment], components: rows, content: '' }); } else { await interaction.update({ files: [attachment], components: rows, content: '' }); }
-    } else {
-        await interaction.reply({ files: [attachment], components: rows, ephemeral: true });
-    }
-}
-
-function createTribuneButtons(tribune: any, userId: string) {
-    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('join_1_1').setLabel('1.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_1), new ButtonBuilder().setCustomId('join_1_2').setLabel('1.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_2), new ButtonBuilder().setCustomId('join_2_1').setLabel('2.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_1), new ButtonBuilder().setCustomId('join_2_2').setLabel('2.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_2));
-    const userSlots = getUserSlots(tribune, userId);
-    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('complete_tribune').setLabel('Завершить трибуну').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('cancel_tribune').setLabel('Отменить трибуну').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('leave_tribune').setLabel('Выписаться').setStyle(ButtonStyle.Primary).setDisabled(userSlots.length === 0));
-    return [row1, row2];
-}
-
+// ... Остальные функции ...
+async function initiateReprimandIssue(interaction: any) { const users = await prisma.user.findMany({ take: 25, orderBy: { createdAt: 'desc' } }); if (users.length === 0) return interaction.reply({ content: 'В базе пока нет пользователей!', ephemeral: true }); const select = new StringSelectMenuBuilder().setCustomId('select_target_for_reprimand').setPlaceholder('Выберите пользователя из списка бота').addOptions(users.map(u => new StringSelectMenuOptionBuilder().setLabel(u.username).setValue(u.discordId))); await interaction.reply({ content: '⚖️ Кому выдать выговор?', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], ephemeral: true }); }
+async function showReprimandModal(interaction: any, targetId: string) { const modal = new ModalBuilder().setCustomId(`modal_issue_reprimand:${targetId}`).setTitle('Выдача выговора'); modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('reprimand_reason').setLabel('Причина выговора').setStyle(TextInputStyle.Paragraph).setRequired(true))); await interaction.showModal(modal); }
+async function saveReprimand(interaction: any, targetId: string, reason: string, client: MyClient) { await prisma.reprimand.create({ data: { userId: targetId, reason, authorId: interaction.user.id } }); await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, ephemeral: true }); const target = await client.users.fetch(targetId).catch(() => null); if (target) { await target.send(`⚖️ **Вам выдан выговор!**\n>>> **Причина:** ${reason}\n**Автор:** <@${interaction.user.id}>`).catch(() => {}); } }
+async function initiateReprimandRemove(interaction: any) { const users = await prisma.user.findMany({ take: 25, orderBy: { createdAt: 'desc' } }); const select = new StringSelectMenuBuilder().setCustomId('select_target_for_remove_reprimand').setPlaceholder('Выберите пользователя').addOptions(users.map(u => new StringSelectMenuOptionBuilder().setLabel(u.username).setValue(u.discordId))); await interaction.reply({ content: '🛡️ С кого снять выговор?', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], ephemeral: true }); }
+async function showReprimandsToRemove(interaction: any, targetId: string) { const reprimands = await prisma.reprimand.findMany({ where: { userId: targetId }, take: 25 }); if (reprimands.length === 0) return interaction.update({ content: 'У этого пользователя нет выговоров.', components: [] }); const select = new StringSelectMenuBuilder().setCustomId('select_reprimand_to_delete').setPlaceholder('Выберите выговор для удаления').addOptions(reprimands.map(r => new StringSelectMenuOptionBuilder().setLabel(r.reason.substring(0, 50)).setValue(r.id))); await interaction.update({ content: `Список выговоров <@${targetId}>:`, components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] }); }
+async function finalizeReprimandRemove(interaction: any, reprimandId: string, client: MyClient) { const reprimand = await prisma.reprimand.findUnique({ where: { id: reprimandId } }); if (!reprimand) return interaction.update({ content: 'Выговор не найден.', components: [] }); await prisma.reprimand.delete({ where: { id: reprimandId } }); await interaction.update({ content: '✅ Выговор успешно снят!', components: [] }); const target = await client.users.fetch(reprimand.userId).catch(() => null); if (target) { await target.send(`🛡️ **С вас снят выговор!**\n>>> **Был за:** ${reprimand.reason}\n**Снял:** <@${interaction.user.id}>`).catch(() => {}); } }
+async function viewMyReprimands(interaction: any) { const reprimands = await prisma.reprimand.findMany({ where: { userId: interaction.user.id }, orderBy: { createdAt: 'desc' } }); const embed = new EmbedBuilder().setTitle('⚖️ Твои выговоры').setColor(reprimands.length > 0 ? '#ff0000' : '#00ff00').setDescription(reprimands.length > 0 ? `Всего нарушений: **${reprimands.length}**` : 'У тебя нет активных выговоров! 🎉'); reprimands.forEach((r, i) => { embed.addFields({ name: `Выговор #${reprimands.length - i}`, value: `>>> **Причина:** ${r.reason}\n**Выдал:** <@${r.authorId}>\n**Дата:** <t:${Math.floor(r.createdAt.getTime() / 1000)}:R>`, inline: false }); }); await interaction.reply({ embeds: [embed], ephemeral: true }); }
+async function handleTasksView(interaction: any) { const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } }); if (!user) return; let taskIndex = user.currentTaskIndex; let isTaskDone = user.isTaskDone; let isTaskPending = user.isTaskPending; const today = new Date(); today.setHours(0, 0, 0, 0); const lastTaskDate = user.lastTaskDate ? new Date(user.lastTaskDate) : null; if (lastTaskDate) lastTaskDate.setHours(0, 0, 0, 0); if (!lastTaskDate || lastTaskDate.getTime() !== today.getTime()) { taskIndex = Math.floor(Math.random() * tasks.length); isTaskDone = false; isTaskPending = false; await prisma.user.update({ where: { discordId: interaction.user.id }, data: { currentTaskIndex: taskIndex, lastTaskDate: new Date(), isTaskDone: false, isTaskPending: false } }); } const taskText = tasks[taskIndex!]; let statusText = '📝 Твое задание на сегодня:'; if (isTaskPending) statusText = '⏳ Задание на проверке у кураторов:'; if (isTaskDone) statusText = '✅ Ты уже выполнил задание на сегодня:'; const embed = new EmbedBuilder().setTitle('📅 Ежедневное задание').setDescription(`${statusText}\n\n>>> **${taskText}**`).setColor(isTaskDone ? '#00ff00' : (isTaskPending ? '#ffff00' : '#00ffff')); const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('submit_task').setLabel('Выполнено').setStyle(ButtonStyle.Success).setDisabled(isTaskDone || isTaskPending)); await interaction.reply({ embeds: [embed], components: [row], ephemeral: true }); }
+async function submitTaskToCurators(interaction: any, client: MyClient) { const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } }); if (!user || user.currentTaskIndex === null) return; await prisma.user.update({ where: { discordId: interaction.user.id }, data: { isTaskPending: true } }); const embed = new EmbedBuilder().setTitle('📢 Новое выполненное задание!').setDescription(`Пользователь <@${interaction.user.id}> утверждает, что выполнил задание:\n\n**${tasks[user.currentTaskIndex]}**`).setColor('#7289da'); const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`approve_task_${interaction.user.id}`).setLabel('Да, принять').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_task_${interaction.user.id}`).setLabel('Нет, отклонить').setStyle(ButtonStyle.Danger)); for (const curatorId of CURATORS) { const curator = await client.users.fetch(curatorId).catch(() => null); if (curator) await curator.send({ embeds: [embed], components: [row] }).catch(() => {}); } await interaction.update({ content: '✅ Задание отправлено на проверку кураторам!', embeds: [], components: [] }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
+async function approveTask(interaction: any, userId: string, client: MyClient) { const user = await prisma.user.findUnique({ where: { discordId: userId } }); if (!user) return interaction.update({ content: 'Ошибка: пользователь не найден.', components: [] }); await prisma.user.update({ where: { discordId: userId }, data: { stars: { increment: 50 }, isTaskDone: true, isTaskPending: false } }); await interaction.update({ content: `✅ Задание <@${userId}> одобрено. +50 звезд начислено!`, components: [] }); const targetUser = await client.users.fetch(userId).catch(() => null); if (targetUser) { await targetUser.send('🌟 Куратор одобрил твое задание! Тебе начислено **50 звезд**.').catch(() => {}); } }
+async function denyTask(interaction: any, userId: string, client: MyClient) { await prisma.user.update({ where: { discordId: userId }, data: { isTaskPending: false } }); await interaction.update({ content: `❌ Задание <@${userId}> отклонено.`, components: [] }); const targetUser = await client.users.fetch(userId).catch(() => null); if (targetUser) { await targetUser.send('❌ Твое задание было отклонено за несоответствие. Попробуй еще раз!').catch(() => {}); } }
+async function renderTribuneView(interaction: any) { const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!activeTribune) { const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('create_event').setLabel('Создать событие').setStyle(ButtonStyle.Success)); return interaction.reply({ content: 'Активных событий нет.', components: [row], ephemeral: true }); } await updateTribuneMessage(interaction); }
+async function updateTribuneMessage(interaction: any) { const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!activeTribune) return; const hostNames: any = {}; const slots = ['slot1_1', 'slot1_2', 'slot2_1', 'slot2_2']; for (const s of slots) { const id = (activeTribune as any)[s]; if (id) { const member = await interaction.guild?.members.fetch(id).catch(() => null); hostNames[s] = member ? member.user.username : 'Неизвестен'; } else { hostNames[s] = null; } } const buffer = await CanvasHelper.drawTribuneCard(activeTribune, hostNames); const attachment = new AttachmentBuilder(buffer, { name: 'tribune.png' }); const rows = createTribuneButtons(activeTribune, interaction.user.id); if (interaction.isButton() || interaction.isStringSelectMenu()) { if (interaction.replied || interaction.deferred) { await interaction.editReply({ files: [attachment], components: rows, content: '' }); } else { await interaction.update({ files: [attachment], components: rows, content: '' }); } } else { await interaction.reply({ files: [attachment], components: rows, ephemeral: true }); } }
+function createTribuneButtons(tribune: any, userId: string) { const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('join_1_1').setLabel('1.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_1), new ButtonBuilder().setCustomId('join_1_2').setLabel('1.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_2), new ButtonBuilder().setCustomId('join_2_1').setLabel('2.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_1), new ButtonBuilder().setCustomId('join_2_2').setLabel('2.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_2)); const userSlots = getUserSlots(tribune, userId); const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('complete_tribune').setLabel('Завершить трибуну').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('cancel_tribune').setLabel('Отменить трибуну').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('leave_tribune').setLabel('Выписаться').setStyle(ButtonStyle.Primary).setDisabled(userSlots.length === 0)); return [row1, row2]; }
 function getUserSlots(tribune: any, userId: string): string[] { const slots = ['slot1_1', 'slot1_2', 'slot2_1', 'slot2_2']; return slots.filter(s => (tribune as any)[s] === userId); }
-
-async function joinSlot(interaction: any, slot: string) {
-    const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!tribune || (tribune as any)[slot]) return;
-    await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: interaction.user.id } });
-    await updateTribuneMessage(interaction);
-}
-
-async function handleLeaveRequest(interaction: any) {
-    const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!tribune) return;
-    const userSlots = getUserSlots(tribune, interaction.user.id);
-    if (userSlots.length === 0) return interaction.reply({ content: 'Вы не записаны.', ephemeral: true });
-    if (userSlots.length === 1) { await leaveSpecificSlot(interaction, userSlots[0]); } else { const select = new StringSelectMenuBuilder().setCustomId('select_leave_slot').setPlaceholder('Выберите место для освобождения').addOptions(userSlots.map(s => new StringSelectMenuOptionBuilder().setLabel(`Место ${s.replace('slot','').replace('_','.')}`).setValue(s))); await interaction.reply({ content: 'Отмена записи:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], ephemeral: true }); }
-}
-
-async function leaveSpecificSlot(interaction: any, slot: string) {
-    const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!tribune) return;
-    await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: null } });
-    
-    // После выписки всегда обновляем основное сообщение с картинкой
-    await updateTribuneMessage(interaction);
-}
-
-async function cancelTribune(interaction: any) {
-    const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!activeTribune) return;
-    await prisma.tribune.delete({ where: { id: activeTribune.id } });
-    await interaction.update({ content: '❌ Трибуна отменена.', components: [], files: [] });
-    setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-}
-
-async function completeTribune(interaction: any) {
-    const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
-    if (!activeTribune) return;
-    const hostIds = [activeTribune.slot1_1, activeTribune.slot1_2, activeTribune.slot2_1, activeTribune.slot2_2].filter(id => id !== null) as string[];
-    await prisma.tribuneHistory.create({ data: { type: activeTribune.type, startTime: activeTribune.dateTime, hostId: interaction.user.id, participants: hostIds.join(',') } });
-    await prisma.tribune.delete({ where: { id: activeTribune.id } });
-    await interaction.update({ content: '✅ Трибуна завершена!', components: [], files: [] });
-    setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
-}
-
-async function viewHistory(interaction: any, personal: boolean) {
-    const history = await prisma.tribuneHistory.findMany({ where: personal ? { hostId: interaction.user.id } : {}, take: 5, orderBy: { closedAt: 'desc' } });
-    if (history.length === 0) return interaction.reply({ content: 'История пуста.', ephemeral: true });
-    const embed = new EmbedBuilder().setTitle(personal ? '🌟 Твои трибуны' : '📜 История').setColor(personal ? '#ff00ff' : '#00ffff').setTimestamp();
-    history.forEach(h => { const hosts = h.participants?.split(',').map(id => id.trim()).filter(id => id && id !== 'null').map(id => `<@${id}>`).join(', ') || '*нет ведущих*'; embed.addFields({ name: `━━━━━━━━━━━━━━━`, value: `**${h.type}** (${h.startTime})\n` + `👑 **Создатель:** <@${h.hostId.trim()}>\n` + `🎤 **Ведущие:** ${hosts}\n` + `📅 Завершена: <t:${Math.floor(h.closedAt.getTime() / 1000)}:R>`, inline: false }); });
-    await interaction.reply({ embeds: [embed], ephemeral: true });
-}
-
+async function joinSlot(interaction: any, slot: string) { const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!tribune || (tribune as any)[slot]) return; await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: interaction.user.id } }); await updateTribuneMessage(interaction); }
+async function handleLeaveRequest(interaction: any) { const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!tribune) return; const userSlots = getUserSlots(tribune, interaction.user.id); if (userSlots.length === 0) return interaction.reply({ content: 'Вы не записаны.', ephemeral: true }); if (userSlots.length === 1) { await leaveSpecificSlot(interaction, userSlots[0]); } else { const select = new StringSelectMenuBuilder().setCustomId('select_leave_slot').setPlaceholder('Выберите место для освобождения').addOptions(userSlots.map(s => new StringSelectMenuOptionBuilder().setLabel(`Место ${s.replace('slot','').replace('_','.')}`).setValue(s))); await interaction.reply({ content: 'Отмена записи:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], ephemeral: true }); } }
+async function leaveSpecificSlot(interaction: any, slot: string) { const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!tribune) return; await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: null } }); await updateTribuneMessage(interaction); }
+async function cancelTribune(interaction: any) { const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!activeTribune) return; await prisma.tribune.delete({ where: { id: activeTribune.id } }); await interaction.update({ content: '❌ Трибуна отменена.', components: [], files: [] }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
+async function completeTribune(interaction: any) { const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } }); if (!activeTribune) return; const hostIds = [activeTribune.slot1_1, activeTribune.slot1_2, activeTribune.slot2_1, activeTribune.slot2_2].filter(id => id !== null) as string[]; await prisma.tribuneHistory.create({ data: { type: activeTribune.type, startTime: activeTribune.dateTime, hostId: interaction.user.id, participants: hostIds.join(',') } }); await prisma.tribune.delete({ where: { id: activeTribune.id } }); await interaction.update({ content: '✅ Трибуна завершена!', components: [], files: [] }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
+async function viewHistory(interaction: any, personal: boolean) { const history = await prisma.tribuneHistory.findMany({ where: personal ? { hostId: interaction.user.id } : {}, take: 5, orderBy: { closedAt: 'desc' } }); if (history.length === 0) return interaction.reply({ content: 'История пуста.', ephemeral: true }); const embed = new EmbedBuilder().setTitle(personal ? '🌟 Твои трибуны' : '📜 История').setColor(personal ? '#ff00ff' : '#00ffff').setTimestamp(); history.forEach(h => { const hosts = h.participants?.split(',').map(id => id.trim()).filter(id => id && id !== 'null').map(id => `<@${id}>`).join(', ') || '*нет ведущих*'; embed.addFields({ name: `━━━━━━━━━━━━━━━`, value: `**${h.type}** (${h.startTime})\n` + `👑 **Создатель:** <@${h.hostId.trim()}>\n` + `🎤 **Ведущие:** ${hosts}\n` + `📅 Завершена: <t:${Math.floor(h.closedAt.getTime() / 1000)}:R>`, inline: false }); }); await interaction.reply({ embeds: [embed], ephemeral: true }); }
 async function showEventSelector(interaction: any) { const select = new StringSelectMenuBuilder().setCustomId('select_event_type').setPlaceholder('Выберите тип').addOptions(new StringSelectMenuOptionBuilder().setLabel('Синяя кнопка').setValue('Синяя кнопка'), new StringSelectMenuOptionBuilder().setLabel('Быстрые свидания').setValue('Быстрые свидания'), new StringSelectMenuOptionBuilder().setLabel('Шоу талантов').setValue('Шоу талантов'), new StringSelectMenuOptionBuilder().setLabel('Любовь в вопросах').setValue('Любовь в вопросах'), new StringSelectMenuOptionBuilder().setLabel('Любовное колесо').setValue('Любовное колесо'), new StringSelectMenuOptionBuilder().setLabel('Давай поженимся').setValue('Давай поженимся')); await interaction.update({ content: 'Тип трибуны:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], files: [] }); }
 async function showDateModal(interaction: any, eventType: string) { const modal = new ModalBuilder().setCustomId(`modal_create_tribune:${eventType}`).setTitle('Параметры'); modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('date_input').setLabel("Дата/время").setStyle(TextInputStyle.Short).setRequired(true))); await interaction.showModal(modal); }
 async function createTribuneInDb(interaction: any, type: string, dateTime: string) { await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); await interaction.reply({ content: `✅ Создано!`, ephemeral: true }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }

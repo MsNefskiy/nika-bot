@@ -1,7 +1,9 @@
 import { createCanvas, loadImage, Canvas, CanvasRenderingContext2D } from 'canvas';
+import { ShopItem } from './shop';
 
 export class CanvasHelper {
     private static async drawBase(ctx: CanvasRenderingContext2D, width: number, height: number) {
+        // --- ВОЗВРАТ К ОРИГИНАЛЬНОМУ ФОНУ ---
         // 1. Глубокий космический фон
         ctx.fillStyle = '#050505';
         ctx.fillRect(0, 0, width, height);
@@ -38,7 +40,7 @@ export class CanvasHelper {
             }
         }
 
-        // 3. ТЕМНО-ФИОЛЕТОВО-КРАСНАЯ РАМКА ПРОФИЛЯ
+        // 3. ТЕМНО-ФИОЛЕТОВО-КРАСНАЯ РАМКА
         const frameGrad = ctx.createLinearGradient(0, 0, width, height);
         frameGrad.addColorStop(0, '#2b1055'); // Темно-фиолетовый
         frameGrad.addColorStop(1, '#8b0000'); // Темно-красный
@@ -63,10 +65,9 @@ export class CanvasHelper {
 
         await this.drawBase(ctx, width, height);
 
-        // Общий градиент для элементов (как у рамки)
         const commonGrad = ctx.createLinearGradient(0, 0, width, height);
-        commonGrad.addColorStop(0, '#7b2ffb'); // Чуть ярче фиолетовый для текста
-        commonGrad.addColorStop(1, '#ff4b4b'); // Чуть ярче красный для текста
+        commonGrad.addColorStop(0, '#a76eff');
+        commonGrad.addColorStop(1, '#ff6e6e');
 
         // --- 1. АВАТАРКА ---
         try {
@@ -114,19 +115,83 @@ export class CanvasHelper {
         ctx.fillText(`✨ ${stars}`, width - 50, 65);
         ctx.shadowBlur = 0;
 
-        // --- 4. ДАТА (В цвете рамки) ---
+        // --- 4. ДАТА ---
         ctx.font = 'bold 20px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillStyle = commonGrad;
         const dateStr = joinedAt.toLocaleDateString('ru-RU');
         ctx.fillText(`📅 С НАМИ С: ${dateStr}`, 45, height - 45);
 
-        // --- 5. НОРМА (В цвете рамки) ---
+        // --- 5. НОРМА ---
         ctx.font = 'bold 28px sans-serif';
         const normText = `Норма: ${hasNorma ? '✅' : '❌'}`;
         ctx.fillStyle = commonGrad;
         ctx.textAlign = 'right';
         ctx.fillText(normText, width - 50, height - 45);
+
+        return canvas.toBuffer();
+    }
+
+    static async drawShopCard(items: ShopItem[]) {
+        const width = 1100; // Сделали ШИРЕ чтобы не налезали (было 800)
+        const height = 650; 
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+
+        await this.drawBase(ctx, width, height);
+
+        // Заголовок - СДЕЛАЛ ТЕМНЕЕ
+        ctx.font = 'bold 44px sans-serif';
+        ctx.fillStyle = '#B8860B'; // Темно-золотой (DarkGoldenRod)
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = '#000000';
+        ctx.fillText('🛒 ЗВЕЗДНАЯ ЛАВКА', width / 2, 75);
+        ctx.shadowBlur = 0;
+
+        // Линия разделитель
+        ctx.strokeStyle = 'rgba(184, 134, 11, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(150, 105);
+        ctx.lineTo(width - 150, 105);
+        ctx.stroke();
+
+        // Сетка (2 колонки)
+        const startX = 80;
+        const startY = 160;
+        const colWidth = 500; // Больше места для колонок
+        const rowHeight = 75;
+
+        items.forEach((item, index) => {
+            const col = index < 6 ? 0 : 1;
+            const row = index % 6;
+            const x = startX + col * colWidth;
+            const y = startY + row * rowHeight;
+
+            // Название товара
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(item.name.substring(0, 40), x, y);
+
+            // Цена
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(`✨ ${item.price}`, x + 380, y);
+
+            // Описание
+            ctx.font = '15px sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillText(item.desc.substring(0, 60), x, y + 28);
+
+            // Разделительная черта под товаром
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.beginPath();
+            ctx.moveTo(x, y + 42);
+            ctx.lineTo(x + 450, y + 42);
+            ctx.stroke();
+        });
 
         return canvas.toBuffer();
     }
@@ -145,6 +210,7 @@ export class CanvasHelper {
         ctx.closePath();
     }
 
+    // ТРИБУНЫ
     static async drawTribuneCard(tribune: any, hostNames: any) {
         const width = 800;
         const height = 500;
