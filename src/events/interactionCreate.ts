@@ -74,9 +74,6 @@ export default {
                 if (interaction.customId === 'select_leave_slot') {
                     await leaveSpecificSlot(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0]);
                 }
-                if (interaction.customId === 'select_target_for_reprimand') {
-                    await showReprimandModal(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0]);
-                }
                 if (interaction.customId === 'select_target_for_remove_reprimand') {
                     await showReprimandsToRemove(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0]);
                 }
@@ -98,6 +95,11 @@ export default {
                 }
                 if (interaction.customId.startsWith('modal_issue_reprimand:')) {
                     const targetId = interaction.customId.split(':')[1];
+                    const reason = interaction.fields.getTextInputValue('reprimand_reason');
+                    await saveReprimand(interaction, targetId, reason, client);
+                }
+                if (interaction.customId === 'modal_issue_reprimand_manual') {
+                    const targetId = interaction.fields.getTextInputValue('target_id');
                     const reason = interaction.fields.getTextInputValue('reprimand_reason');
                     await saveReprimand(interaction, targetId, reason, client);
                 }
@@ -204,62 +206,40 @@ async function processPurchase(interaction: ButtonInteraction, itemId: string, c
 // --- СИСТЕМА ВЫГОВОРОВ (АДМИН) ---
 
 async function initiateReprimandIssue(interaction: ButtonInteraction) {
-    const guild = interaction.guild;
-    if (!guild) return interaction.reply({ content: 'Ошибка: сервер не найден.', ephemeral: true });
+    const modal = new ModalBuilder()
+        .setCustomId('modal_issue_reprimand_manual')
+        .setTitle('Выдача выговора');
 
-    await interaction.deferReply({ ephemeral: true });
-    
-    try {
-        const members = await guild.members.fetch();
-        const roleMembers = Array.from(members
-            .filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID))
-            .values())
-            .map(m => ({
-                id: m.user.id,
-                username: m.user.username,
-                displayName: m.displayName
-            }))
-            .sort((a, b) => a.displayName.localeCompare(b.displayName))
-            .slice(0, 25);
+    const idInput = new TextInputBuilder()
+        .setCustomId('target_id')
+        .setLabel('ID пользователя')
+        .setPlaceholder('Вставьте ID (например: 123456789012345678)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
-        if (roleMembers.length === 0) {
-            return interaction.editReply({ content: 'Пользователей с указанной ролью не найдено!' });
-        }
+    const reasonInput = new TextInputBuilder()
+        .setCustomId('reprimand_reason')
+        .setLabel('Причина выговора')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true);
 
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('select_target_for_reprimand')
-            .setPlaceholder('Выберите пользователя из списка роли')
-            .addOptions(roleMembers.map(m => 
-                new StringSelectMenuOptionBuilder()
-                    .setLabel(m.displayName.substring(0, 50))
-                    .setValue(m.id)
-            ));
+    modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(idInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput)
+    );
 
-        await interaction.editReply({ 
-            content: '⚖️ Кому выдать выговор?', 
-            components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
-        });
-    } catch (error) {
-        console.error('Error fetching members:', error);
-        await interaction.editReply({ content: 'Ошибка при получении списка участников сервера.' });
-    }
-}
-
-async function showReprimandModal(interaction: StringSelectMenuInteraction, targetId: string) {
-    const modal = new ModalBuilder().setCustomId(`modal_issue_reprimand:${targetId}`).setTitle('Выдача выговора');
-    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-            .setCustomId('reprimand_reason')
-            .setLabel('Причина выговора')
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-    ));
     await interaction.showModal(modal);
 }
 
+
 async function saveReprimand(interaction: ModalSubmitInteraction, targetId: string, reason: string, client: MyClient) {
-    const targetUser = await client.users.fetch(targetId).catch(() => null);
-    const username = targetUser?.username || 'Unknown';
+    // Проверка, есть ли пользователь на сервере
+    const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
+    if (!member) {
+        return interaction.reply({ content: '❌ Пользователь не найден на этом сервере!', ephemeral: true });
+    }
+
+    const username = member.user.username;
 
     // Гарантируем, что пользователь есть в базе перед созданием выговора
     await prisma.user.upsert({
@@ -275,8 +255,11 @@ async function saveReprimand(interaction: ModalSubmitInteraction, targetId: stri
 
     await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, ephemeral: true });
 
-    if (targetUser) {
-        await targetUser.send(`⚖️ **Вам выдан выговор!**\n>>> **Причина:** ${reason}\n**Автор:** <@${interaction.user.id}>`).catch(() => {});
+    // Попытка отправить сообщение в личку (не блокирует выполнение из-за catch)
+    try {
+        await member.send(`⚖️ **Вам выдан выговор!**\n>>> **Причина:** ${reason}\n**Автор:** <@${interaction.user.id}>`);
+    } catch (e) {
+        console.log(`Не удалось отправить ЛС пользователю ${targetId}:`, e);
     }
 }
 
