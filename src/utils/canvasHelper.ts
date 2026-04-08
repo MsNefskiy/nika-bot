@@ -136,7 +136,7 @@ export class CanvasHelper {
         ctx.fillStyle = commonGrad;
         const dateStr = joinedAt.toLocaleDateString('ru-RU');
         
-        ctx.fillText(`С НАМИ С: ${dateStr}`, 45, height - 45);
+        ctx.fillText(`📅 С НАМИ С: ${dateStr}`, 45, height - 45);
 
         // --- 5. НОРМА ---
         ctx.font = 'bold 28px "Segoe UI Emoji", sans-serif';
@@ -144,7 +144,7 @@ export class CanvasHelper {
         ctx.textAlign = 'right';
         
         const normEmoji = hasNorma ? '✅' : '❌';
-        ctx.fillText(`${normEmoji} Норма`, width - 50, height - 45);
+        ctx.fillText(`Норма ${normEmoji}`, width - 50, height - 45);
 
         return canvas.toBuffer();
     }
@@ -195,6 +195,8 @@ export class CanvasHelper {
             ctx.fillText(item.name.substring(0, 40), x, y);
 
             // Цена
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 20px "Segoe UI Emoji", sans-serif';
             ctx.fillText(`✨ ${item.price}`, x + 380, y);
 
             // Описание
