@@ -1,17 +1,19 @@
-import { createCanvas, loadImage, Canvas, CanvasRenderingContext2D, Image } from 'canvas';
+import { createCanvas, loadImage, registerFont, Canvas, CanvasRenderingContext2D, Image } from 'canvas';
 import { ShopItem } from './shop';
 import path from 'path';
 
 const ASSETS_DIR = path.join(process.cwd(), 'assets');
 
 export class CanvasHelper {
-    private static iconCache: Map<string, Image> = new Map();
-
-    private static async getIcon(name: string): Promise<Image> {
-        if (this.iconCache.has(name)) return this.iconCache.get(name)!;
-        const icon = await loadImage(path.join(ASSETS_DIR, `${name}.png`));
-        this.iconCache.set(name, icon);
-        return icon;
+    static {
+        // Регистрируем шрифт при загрузке класса
+        const fontPath = path.join(process.cwd(), 'fonts', 'seguiemj.ttf');
+        try {
+            registerFont(fontPath, { family: 'Segoe UI Emoji' });
+            console.log('✅ Segoe UI Emoji registered successfully');
+        } catch (e) {
+            console.error('❌ Failed to register Segoe UI Emoji:', e);
+        }
     }
 
     private static async drawBase(ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -119,18 +121,13 @@ export class CanvasHelper {
         ctx.fillText(username, nameX + 20, nameY + 40);
 
         // --- 3. ЗВЕЗДЫ ---
-        ctx.font = 'bold 30px sans-serif';
+        ctx.font = 'bold 30px "Segoe UI Emoji", sans-serif';
         ctx.fillStyle = '#FFD700';
         ctx.textAlign = 'right';
         ctx.shadowBlur = 10;
         ctx.shadowColor = '#FFD700';
         
-        try {
-            const star = await this.getIcon('sparkles');
-            ctx.drawImage(star, width - 110, 35, 30, 30);
-        } catch {}
-        
-        ctx.fillText(`${stars}`, width - 50, 65);
+        ctx.fillText(`✨ ${stars}`, width - 50, 65);
         ctx.shadowBlur = 0;
 
         // --- 4. ДАТА ---
@@ -142,17 +139,12 @@ export class CanvasHelper {
         ctx.fillText(`С НАМИ С: ${dateStr}`, 45, height - 45);
 
         // --- 5. НОРМА ---
-        ctx.font = 'bold 28px sans-serif';
+        ctx.font = 'bold 28px "Segoe UI Emoji", sans-serif';
         ctx.fillStyle = '#a76eff';
         ctx.textAlign = 'right';
         
-        const normIcon = hasNorma ? 'check' : 'cross';
-        try {
-            const ni = await this.getIcon(normIcon);
-            ctx.drawImage(ni, width - 190, height - 72, 28, 28);
-        } catch {}
-        
-        ctx.fillText(`Норма`, width - 50, height - 45);
+        const normEmoji = hasNorma ? '✅' : '❌';
+        ctx.fillText(`${normEmoji} Норма`, width - 50, height - 45);
 
         return canvas.toBuffer();
     }
@@ -172,12 +164,7 @@ export class CanvasHelper {
         ctx.shadowBlur = 5;
         ctx.shadowColor = '#000000';
         
-        try {
-            const shopIcon = await this.getIcon('shop');
-            ctx.drawImage(shopIcon, width / 2 - 250, 35, 50, 50);
-        } catch {}
-
-        ctx.fillText('ЗВЕЗДНАЯ ЛАВКА', width / 2 + 30, 75);
+        ctx.fillText('🛒 ЗВЕЗДНАЯ ЛАВКА', width / 2 + 30, 75);
         ctx.shadowBlur = 0;
 
         // Линия разделитель
@@ -208,15 +195,7 @@ export class CanvasHelper {
             ctx.fillText(item.name.substring(0, 40), x, y);
 
             // Цена
-            ctx.fillStyle = '#FFD700';
-            ctx.font = 'bold 20px sans-serif';
-            
-            try {
-                const s = await this.getIcon('sparkles');
-                ctx.drawImage(s, x + 355, y - 18, 20, 20);
-            } catch {}
-
-            ctx.fillText(`${item.price}`, x + 380, y);
+            ctx.fillText(`✨ ${item.price}`, x + 380, y);
 
             // Описание
             ctx.font = '15px sans-serif';
@@ -263,17 +242,18 @@ export class CanvasHelper {
         commonGrad.addColorStop(1, '#ff6e6e');
 
         // Название трибуны (По центру 500)
-        ctx.font = 'bold 42px sans-serif';
+        ctx.font = 'bold 42px "Segoe UI Emoji", sans-serif';
         ctx.fillStyle = commonGrad;
         ctx.textAlign = 'center';
         
-        ctx.fillText(`${tribune.type}`, width / 2, 80);
+        ctx.fillText(`🎤 ${tribune.type}`, width / 2, 80);
 
         // Время (По центру 500)
-        ctx.font = '28px sans-serif';
+        ctx.font = '28px "Segoe UI Emoji", sans-serif';
         ctx.fillStyle = commonGrad;
         
-        ctx.fillText(`Время: ${tribune.dateTime}`, width / 2, 130);
+        ctx.fillText(`🕒 Время: ${tribune.dateTime}`, width / 2, 130);
+        ctx.textAlign = 'center'; // Обеспечиваем центровку
 
         // Центральная линия (По центру 500)
         ctx.strokeStyle = commonGrad;

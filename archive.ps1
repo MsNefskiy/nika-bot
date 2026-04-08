@@ -25,7 +25,7 @@ if (Test-Path "dist") {
 }
 
 # Копируем конфиги и ассеты
-$rootFiles = @("package.json", "package-lock.json", ".env", "assets")
+$rootFiles = @("package.json", "package-lock.json", ".env", "assets", "fonts")
 foreach ($f in $rootFiles) {
     if (Test-Path $f) {
         Copy-Item -Path $f -Destination $tempDir -Recurse -Force
