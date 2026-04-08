@@ -118,14 +118,14 @@ export class CanvasHelper {
         // --- 4. ДАТА ---
         ctx.font = 'bold 20px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = commonGrad;
         const dateStr = joinedAt.toLocaleDateString('ru-RU');
         ctx.fillText(`📅 С НАМИ С: ${dateStr}`, 45, height - 45);
 
         // --- 5. НОРМА ---
         ctx.font = 'bold 28px sans-serif';
         const normText = `Норма: ${hasNorma ? '✅' : '❌'}`;
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#a76eff';
         ctx.textAlign = 'right';
         ctx.fillText(normText, width - 50, height - 45);
 
