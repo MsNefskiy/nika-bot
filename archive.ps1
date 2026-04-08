@@ -24,11 +24,11 @@ if (Test-Path "dist") {
     Get-ChildItem -Path "$tempDir/dist" -Include *.d.ts, *.js.map -Recurse | Remove-Item -Force
 }
 
-# Копируем кофиги
-$rootFiles = @("package.json", "package-lock.json", ".env")
+# Копируем конфиги и ассеты
+$rootFiles = @("package.json", "package-lock.json", ".env", "assets")
 foreach ($f in $rootFiles) {
     if (Test-Path $f) {
-        Copy-Item -Path $f -Destination $tempDir -Force
+        Copy-Item -Path $f -Destination $tempDir -Recurse -Force
     }
 }
 

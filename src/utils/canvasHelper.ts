@@ -1,7 +1,19 @@
-import { createCanvas, loadImage, Canvas, CanvasRenderingContext2D } from 'canvas';
+import { createCanvas, loadImage, Canvas, CanvasRenderingContext2D, Image } from 'canvas';
 import { ShopItem } from './shop';
+import path from 'path';
+
+const ASSETS_DIR = path.join(process.cwd(), 'assets');
 
 export class CanvasHelper {
+    private static iconCache: Map<string, Image> = new Map();
+
+    private static async getIcon(name: string): Promise<Image> {
+        if (this.iconCache.has(name)) return this.iconCache.get(name)!;
+        const icon = await loadImage(path.join(ASSETS_DIR, `${name}.png`));
+        this.iconCache.set(name, icon);
+        return icon;
+    }
+
     private static async drawBase(ctx: CanvasRenderingContext2D, width: number, height: number) {
         // --- ВОЗВРАТ К ОРИГИНАЛЬНОМУ ФОНУ ---
         // 1. Глубокий космический фон
@@ -112,7 +124,13 @@ export class CanvasHelper {
         ctx.textAlign = 'right';
         ctx.shadowBlur = 10;
         ctx.shadowColor = '#FFD700';
-        ctx.fillText(`✨ ${stars}`, width - 50, 65);
+        
+        try {
+            const star = await this.getIcon('sparkles');
+            ctx.drawImage(star, width - 150, 35, 30, 30);
+        } catch {}
+        
+        ctx.fillText(`${stars}`, width - 50, 65);
         ctx.shadowBlur = 0;
 
         // --- 4. ДАТА ---
@@ -120,14 +138,26 @@ export class CanvasHelper {
         ctx.textAlign = 'left';
         ctx.fillStyle = commonGrad;
         const dateStr = joinedAt.toLocaleDateString('ru-RU');
-        ctx.fillText(`📅 С НАМИ С: ${dateStr}`, 45, height - 45);
+        
+        try {
+            const cal = await this.getIcon('calendar');
+            ctx.drawImage(cal, 45, height - 68, 24, 24);
+        } catch {}
+        
+        ctx.fillText(`С НАМИ С: ${dateStr}`, 80, height - 45);
 
         // --- 5. НОРМА ---
         ctx.font = 'bold 28px sans-serif';
-        const normText = `Норма: ${hasNorma ? '✅' : '❌'}`;
         ctx.fillStyle = '#a76eff';
         ctx.textAlign = 'right';
-        ctx.fillText(normText, width - 50, height - 45);
+        
+        const normIcon = hasNorma ? 'check' : 'cross';
+        try {
+            const ni = await this.getIcon(normIcon);
+            ctx.drawImage(ni, width - 190, height - 72, 28, 28);
+        } catch {}
+        
+        ctx.fillText(`Норма`, width - 50, height - 45);
 
         return canvas.toBuffer();
     }
@@ -146,7 +176,13 @@ export class CanvasHelper {
         ctx.textAlign = 'center';
         ctx.shadowBlur = 5;
         ctx.shadowColor = '#000000';
-        ctx.fillText('🛒 ЗВЕЗДНАЯ ЛАВКА', width / 2, 75);
+        
+        try {
+            const shopIcon = await this.getIcon('shop');
+            ctx.drawImage(shopIcon, width / 2 - 250, 35, 50, 50);
+        } catch {}
+
+        ctx.fillText('ЗВЕЗДНАЯ ЛАВКА', width / 2 + 30, 75);
         ctx.shadowBlur = 0;
 
         // Линия разделитель
@@ -163,7 +199,8 @@ export class CanvasHelper {
         const colWidth = 500; // Больше места для колонок
         const rowHeight = 75;
 
-        items.forEach((item, index) => {
+        let index = 0;
+        for (const item of items) {
             const col = index < 6 ? 0 : 1;
             const row = index % 6;
             const x = startX + col * colWidth;
@@ -178,7 +215,13 @@ export class CanvasHelper {
             // Цена
             ctx.fillStyle = '#FFD700';
             ctx.font = 'bold 20px sans-serif';
-            ctx.fillText(`✨ ${item.price}`, x + 380, y);
+            
+            try {
+                const s = await this.getIcon('sparkles');
+                ctx.drawImage(s, x + 355, y - 18, 20, 20);
+            } catch {}
+
+            ctx.fillText(`${item.price}`, x + 380, y);
 
             // Описание
             ctx.font = '15px sans-serif';
@@ -191,7 +234,9 @@ export class CanvasHelper {
             ctx.moveTo(x, y + 42);
             ctx.lineTo(x + 450, y + 42);
             ctx.stroke();
-        });
+            
+            index++;
+        }
 
         return canvas.toBuffer();
     }
@@ -226,12 +271,24 @@ export class CanvasHelper {
         ctx.font = 'bold 42px sans-serif';
         ctx.fillStyle = commonGrad;
         ctx.textAlign = 'center';
-        ctx.fillText(`🎤 ${tribune.type}`, width / 2, 80);
+        
+        try {
+            const mic = await this.getIcon('mic');
+            ctx.drawImage(mic, width / 2 - 220, 38, 50, 50);
+        } catch {}
+
+        ctx.fillText(`${tribune.type}`, width / 2 + 20, 80);
 
         // Время (По центру 500)
         ctx.font = '28px sans-serif';
         ctx.fillStyle = commonGrad;
-        ctx.fillText(`🕒 Время: ${tribune.dateTime}`, width / 2, 130);
+        
+        try {
+            const clock = await this.getIcon('clock');
+            ctx.drawImage(clock, width / 2 - 160, 102, 30, 30);
+        } catch {}
+
+        ctx.fillText(`Время: ${tribune.dateTime}`, width / 2 + 20, 130);
 
         // Центральная линия (По центру 500)
         ctx.strokeStyle = commonGrad;
