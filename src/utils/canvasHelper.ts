@@ -127,7 +127,7 @@ export class CanvasHelper {
         
         try {
             const star = await this.getIcon('sparkles');
-            ctx.drawImage(star, width - 150, 35, 30, 30);
+            ctx.drawImage(star, width - 110, 35, 30, 30);
         } catch {}
         
         ctx.fillText(`${stars}`, width - 50, 65);
@@ -139,12 +139,7 @@ export class CanvasHelper {
         ctx.fillStyle = commonGrad;
         const dateStr = joinedAt.toLocaleDateString('ru-RU');
         
-        try {
-            const cal = await this.getIcon('calendar');
-            ctx.drawImage(cal, 45, height - 68, 24, 24);
-        } catch {}
-        
-        ctx.fillText(`С НАМИ С: ${dateStr}`, 80, height - 45);
+        ctx.fillText(`С НАМИ С: ${dateStr}`, 45, height - 45);
 
         // --- 5. НОРМА ---
         ctx.font = 'bold 28px sans-serif';
@@ -272,23 +267,13 @@ export class CanvasHelper {
         ctx.fillStyle = commonGrad;
         ctx.textAlign = 'center';
         
-        try {
-            const mic = await this.getIcon('mic');
-            ctx.drawImage(mic, width / 2 - 220, 38, 50, 50);
-        } catch {}
-
-        ctx.fillText(`${tribune.type}`, width / 2 + 20, 80);
+        ctx.fillText(`${tribune.type}`, width / 2, 80);
 
         // Время (По центру 500)
         ctx.font = '28px sans-serif';
         ctx.fillStyle = commonGrad;
         
-        try {
-            const clock = await this.getIcon('clock');
-            ctx.drawImage(clock, width / 2 - 160, 102, 30, 30);
-        } catch {}
-
-        ctx.fillText(`Время: ${tribune.dateTime}`, width / 2 + 20, 130);
+        ctx.fillText(`Время: ${tribune.dateTime}`, width / 2, 130);
 
         // Центральная линия (По центру 500)
         ctx.strokeStyle = commonGrad;
