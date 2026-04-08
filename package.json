@@ -8,7 +8,7 @@
     "deploy": "node dist/index.js --deploy",
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc && npx prisma generate",
-    "postinstall": "prisma generate",
+    "postinstall": "npm run build",
     "archive": "powershell -ExecutionPolicy Bypass -File ./archive.ps1"
   },
   "keywords": [],
