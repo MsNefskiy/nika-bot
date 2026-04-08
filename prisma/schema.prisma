@@ -11,7 +11,15 @@ model User {
   id            String   @id @default(uuid())
   discordId     String   @unique
   username      String
-  points        Int      @default(0)
+  stars         Int      @default(0)         // Звезды
+  joinedAt      DateTime @default(now())      // Дата первого входа
+  
+  // Задания
+  lastTaskDate     DateTime?
+  currentTaskIndex Int?
+  isTaskDone       Boolean   @default(false)
+  isTaskPending    Boolean   @default(false)
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
