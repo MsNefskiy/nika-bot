@@ -5,8 +5,11 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
+    "deploy": "node dist/index.js --deploy",
     "dev": "nodemon --exec ts-node src/index.ts",
-    "build": "tsc"
+    "build": "tsc && npx prisma generate",
+    "postinstall": "prisma generate",
+    "archive": "powershell -ExecutionPolicy Bypass -File ./archive.ps1"
   },
   "keywords": [],
   "author": "",
