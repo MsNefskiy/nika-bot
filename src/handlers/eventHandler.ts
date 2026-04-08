@@ -1,4 +1,4 @@
-import { MyClient } from '../index';
+import { MyClient } from '../types';
 import fs from 'fs';
 import path from 'path';
 
@@ -11,9 +11,9 @@ export async function loadEvents(client: MyClient) {
         const event = require(filePath).default;
         
         if (event.once) {
-            client.once(event.name, (...args) => event.execute(...args, client));
+            client.once(event.name, (...args: any[]) => event.execute(...args, client));
         } else {
-            client.on(event.name, (...args) => event.execute(...args, client));
+            client.on(event.name, (...args: any[]) => event.execute(...args, client));
         }
     }
     console.log(`✅ Загружено событий: ${eventFiles.length}`);

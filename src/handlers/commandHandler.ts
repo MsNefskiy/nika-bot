@@ -1,4 +1,4 @@
-import { MyClient } from '../index';
+import { MyClient } from '../types';
 import fs from 'fs';
 import path from 'path';
 import { REST, Routes } from 'discord.js';

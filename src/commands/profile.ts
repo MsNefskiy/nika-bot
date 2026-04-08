@@ -6,7 +6,7 @@ import {
     ButtonBuilder, 
     ButtonStyle 
 } from 'discord.js';
-import { MyClient } from '../index';
+import { MyClient } from '../types';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { prisma } from '../handlers/db';
 import { isCurator } from '../utils/config';

@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import * as dotenv from 'dotenv';
 import { loadEvents } from './handlers/eventHandler';
 import { loadCommands } from './handlers/commandHandler';
+import { MyClient } from './types';
 import http from 'http';
 
 // Просто сервер для прохождения Health Check на Render
@@ -14,10 +15,6 @@ http.createServer((req, res) => {
 });
 
 dotenv.config();
-
-export class MyClient extends Client {
-    commands: Collection<string, any> = new Collection();
-}
 
 const client = new MyClient({
     intents: [

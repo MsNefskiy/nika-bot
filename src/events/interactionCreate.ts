@@ -15,7 +15,7 @@ import {
     ModalSubmitInteraction,
     UserSelectMenuInteraction
 } from 'discord.js';
-import { MyClient } from '../index';
+import { MyClient } from '../types';
 import { prisma } from '../handlers/db';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { tasks } from '../utils/tasks';
