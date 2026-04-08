@@ -212,46 +212,73 @@ export class CanvasHelper {
 
     // ТРИБУНЫ
     static async drawTribuneCard(tribune: any, hostNames: any) {
-        const width = 800;
-        const height = 500;
+        const width = 1000; // Шире (было 800)
+        const height = 600; // Выше (было 500)
         const canvas = createCanvas(width, height);
         const ctx = canvas.getContext('2d');
         await this.drawBase(ctx, width, height);
 
-        ctx.font = 'bold 36px sans-serif';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Трибуна: ${tribune.type}`, 400, 70);
-        ctx.font = '24px sans-serif';
-        ctx.fillText(`Время: ${tribune.dateTime}`, 400, 110);
+        const commonGrad = ctx.createLinearGradient(0, 0, width, height);
+        commonGrad.addColorStop(0, '#a76eff');
+        commonGrad.addColorStop(1, '#ff6e6e');
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
+        // Название трибуны (По центру 500)
+        ctx.font = 'bold 42px sans-serif';
+        ctx.fillStyle = commonGrad;
+        ctx.textAlign = 'center';
+        ctx.fillText(`🎤 ${tribune.type}`, width / 2, 80);
+
+        // Время (По центру 500)
+        ctx.font = '28px sans-serif';
+        ctx.fillStyle = commonGrad;
+        ctx.fillText(`🕒 Время: ${tribune.dateTime}`, width / 2, 130);
+
+        // Центральная линия (По центру 500)
+        ctx.strokeStyle = commonGrad;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(400, 150);
-        ctx.lineTo(400, 450);
+        ctx.moveTo(width / 2, 180);
+        ctx.lineTo(width / 2, 530);
         ctx.stroke();
 
-        ctx.font = 'bold 24px sans-serif';
-        ctx.fillText('Ведущие (1 пол.)', 200, 160);
-        ctx.fillText('Ведущие (2 пол.)', 600, 160);
+        // Заголовки половин (250 и 750)
+        ctx.font = 'bold 26px sans-serif';
+        ctx.fillStyle = commonGrad;
+        ctx.fillText('Ведущие (1 пол.)', width * 0.25, 190);
+        ctx.fillText('Ведущие (2 пол.)', width * 0.75, 190);
 
         const slots = [
-            { key: 'slot1_1', x: 200, y: 220, label: 'Место 1.1' },
-            { key: 'slot1_2', x: 200, y: 320, label: 'Место 1.2' },
-            { key: 'slot2_1', x: 600, y: 220, label: 'Место 2.1' },
-            { key: 'slot2_2', x: 600, y: 320, label: 'Место 2.2' },
+            { key: 'slot1_1', x: width * 0.25, y: 270, label: 'Место 1.1' },
+            { key: 'slot1_2', x: width * 0.25, y: 410, label: 'Место 1.2' },
+            { key: 'slot2_1', x: width * 0.75, y: 270, label: 'Место 2.1' },
+            { key: 'slot2_2', x: width * 0.75, y: 410, label: 'Место 2.2' },
         ];
 
         slots.forEach(slot => {
             const occupant = hostNames[slot.key];
-            ctx.fillStyle = occupant ? '#00ffff' : '#888888';
-            ctx.font = '20px sans-serif';
-            ctx.fillText(`${slot.label}:`, slot.x, slot.y - 15);
-            ctx.font = occupant ? 'bold 22px sans-serif' : 'italic 18px sans-serif';
-            ctx.fillText(occupant || 'свободно', slot.x, slot.y + 15);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.strokeRect(slot.x - 130, slot.y - 40, 260, 70);
+            
+            // Рамка слота (Шире плашка 350px)
+            ctx.strokeStyle = commonGrad;
+            ctx.lineWidth = 2;
+            const cardW = 350;
+            const cardH = 90;
+            ctx.strokeRect(slot.x - cardW / 2, slot.y - 50, cardW, cardH);
+
+            // Название места
+            ctx.fillStyle = commonGrad;
+            ctx.font = '22px sans-serif';
+            ctx.fillText(`${slot.label}:`, slot.x, slot.y - 20);
+
+            // Имя ведущего
+            if (occupant) {
+                ctx.fillStyle = commonGrad;
+                ctx.font = 'bold 26px sans-serif';
+                ctx.fillText(occupant, slot.x, slot.y + 20);
+            } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.font = 'italic 20px sans-serif';
+                ctx.fillText('СВОБОДНО', slot.x, slot.y + 20);
+            }
         });
 
         return canvas.toBuffer();
