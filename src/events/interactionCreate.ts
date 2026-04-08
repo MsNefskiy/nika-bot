@@ -19,7 +19,7 @@ import { MyClient } from '../index';
 import { prisma } from '../handlers/db';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { tasks } from '../utils/tasks';
-import { CURATORS, isCurator } from '../utils/config';
+import { CURATORS, isCurator, REPRIMAND_ROLE_ID } from '../utils/config';
 import { shopItems } from '../utils/shop';
 
 export default {
@@ -204,19 +204,45 @@ async function processPurchase(interaction: ButtonInteraction, itemId: string, c
 // --- СИСТЕМА ВЫГОВОРОВ (АДМИН) ---
 
 async function initiateReprimandIssue(interaction: ButtonInteraction) {
-    const users = await prisma.user.findMany({ take: 25, orderBy: { createdAt: 'desc' } });
-    if (users.length === 0) return interaction.reply({ content: 'В базе пока нет пользователей!', ephemeral: true });
+    const guild = interaction.guild;
+    if (!guild) return interaction.reply({ content: 'Ошибка: сервер не найден.', ephemeral: true });
 
-    const select = new StringSelectMenuBuilder()
-        .setCustomId('select_target_for_reprimand')
-        .setPlaceholder('Выберите пользователя из списка бота')
-        .addOptions(users.map(u => new StringSelectMenuOptionBuilder().setLabel(u.username).setValue(u.discordId)));
+    await interaction.deferReply({ ephemeral: true });
+    
+    try {
+        const members = await guild.members.fetch();
+        const roleMembers = Array.from(members
+            .filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID))
+            .values())
+            .map(m => ({
+                id: m.user.id,
+                username: m.user.username,
+                displayName: m.displayName
+            }))
+            .sort((a, b) => a.displayName.localeCompare(b.displayName))
+            .slice(0, 25);
 
-    await interaction.reply({ 
-        content: '⚖️ Кому выдать выговор?', 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], 
-        ephemeral: true 
-    });
+        if (roleMembers.length === 0) {
+            return interaction.editReply({ content: 'Пользователей с указанной ролью не найдено!' });
+        }
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('select_target_for_reprimand')
+            .setPlaceholder('Выберите пользователя из списка роли')
+            .addOptions(roleMembers.map(m => 
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(m.displayName.substring(0, 50))
+                    .setValue(m.id)
+            ));
+
+        await interaction.editReply({ 
+            content: '⚖️ Кому выдать выговор?', 
+            components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
+        });
+    } catch (error) {
+        console.error('Error fetching members:', error);
+        await interaction.editReply({ content: 'Ошибка при получении списка участников сервера.' });
+    }
 }
 
 async function showReprimandModal(interaction: StringSelectMenuInteraction, targetId: string) {
@@ -232,6 +258,16 @@ async function showReprimandModal(interaction: StringSelectMenuInteraction, targ
 }
 
 async function saveReprimand(interaction: ModalSubmitInteraction, targetId: string, reason: string, client: MyClient) {
+    const targetUser = await client.users.fetch(targetId).catch(() => null);
+    const username = targetUser?.username || 'Unknown';
+
+    // Гарантируем, что пользователь есть в базе перед созданием выговора
+    await prisma.user.upsert({
+        where: { discordId: targetId },
+        update: { username },
+        create: { discordId: targetId, username }
+    });
+
     // ВНИМАНИЕ: Если здесь ошибка, запустите npx prisma generate!
     await (prisma as any).reprimand.create({
         data: { userId: targetId, reason, authorId: interaction.user.id }
@@ -239,9 +275,8 @@ async function saveReprimand(interaction: ModalSubmitInteraction, targetId: stri
 
     await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, ephemeral: true });
 
-    const target = await client.users.fetch(targetId).catch(() => null);
-    if (target) {
-        await target.send(`⚖️ **Вам выдан выговор!**\n>>> **Причина:** ${reason}\n**Автор:** <@${interaction.user.id}>`).catch(() => {});
+    if (targetUser) {
+        await targetUser.send(`⚖️ **Вам выдан выговор!**\n>>> **Причина:** ${reason}\n**Автор:** <@${interaction.user.id}>`).catch(() => {});
     }
 }
 
