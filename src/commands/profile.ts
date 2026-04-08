@@ -1,22 +1,34 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { 
+    SlashCommandBuilder, 
+    ChatInputCommandInteraction, 
+    AttachmentBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle 
+} from 'discord.js';
 import { MyClient } from '../index';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { prisma } from '../handlers/db';
+import { isCurator } from '../utils/config';
 
 export default {
     data: new SlashCommandBuilder()
         .setName('profile')
         .setNameLocalization('ru', 'профиль')
-        .setDescription('Show your profile')
-        .setDescriptionLocalization('ru', 'Показать ваш профиль'),
+        .setDescription('Show your personal profile (Private)')
+        .setDescriptionLocalization('ru', 'Показать ваш личный профиль (Приватно)'),
     async execute(interaction: ChatInputCommandInteraction, client: MyClient) {
-        // Находим или создаем пользователя
-        const user = await prisma.user.upsert({
-            where: { discordId: interaction.user.id },
-            update: { username: interaction.user.username },
+        // Всегда показываем профиль автора команды
+        const targetUser = interaction.user;
+        const curatorStatus = isCurator(targetUser.id);
+
+        // Находим или создаем пользователя в БД
+        const dbUser = await prisma.user.upsert({
+            where: { discordId: targetUser.id },
+            update: { username: targetUser.username },
             create: { 
-                discordId: interaction.user.id, 
-                username: interaction.user.username,
+                discordId: targetUser.id, 
+                username: targetUser.username,
                 joinedAt: new Date()
             }
         });
@@ -27,26 +39,29 @@ export default {
 
         const historyCount = await prisma.tribuneHistory.count({
             where: {
-                hostId: interaction.user.id,
+                hostId: targetUser.id,
                 closedAt: { gte: twoWeeksAgo }
             }
         });
 
         const hasNorma = historyCount > 0;
 
-        // Отрисовка
-        const avatarUrl = interaction.user.displayAvatarURL({ extension: 'png' });
+        // Отрисовка профиля
+        const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });
         const buffer = await CanvasHelper.drawProfileCard(
-            interaction.user.username, 
+            targetUser.username, 
             avatarUrl,
             hasNorma, 
-            user.stars, 
-            user.joinedAt
+            dbUser.stars, 
+            dbUser.joinedAt
         );
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 
-        // Кнопки
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        // --- КНОПКИ ---
+        const rows = [];
+        
+        // Первый ряд: Личные кнопки
+        const mainRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId('view_tasks')
                 .setLabel('Задания')
@@ -58,9 +73,30 @@ export default {
             new ButtonBuilder()
                 .setCustomId('view_history')
                 .setLabel('История')
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('view_my_reprimands')
+                .setLabel('Выговоры')
+                .setStyle(ButtonStyle.Danger)
         );
+        rows.push(mainRow);
 
-        await interaction.reply({ files: [attachment], components: [row] });
+        // Второй ряд: Админ-панель для кураторов
+        if (curatorStatus) {
+            const curatorRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('admin_issue_reprimand')
+                    .setLabel('Выдать выговор')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('admin_remove_reprimand')
+                    .setLabel('Снять выговор')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+            rows.push(curatorRow);
+        }
+
+        // Отправляем приватно (ephemeral)
+        await interaction.reply({ files: [attachment], components: rows, ephemeral: true });
     },
 };
