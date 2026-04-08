@@ -58,30 +58,35 @@ export default {
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 
         // --- КНОПКИ ---
-        const rows = [];
-        
-        // Первый ряд: Личные кнопки
-        const mainRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId('view_tasks')
                 .setLabel('Задания')
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
-                .setCustomId('view_tribune')
-                .setLabel('Трибуны')
+                .setCustomId('view_shop')
+                .setLabel('Магазин')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
-                .setCustomId('view_history')
-                .setLabel('История')
-                .setStyle(ButtonStyle.Secondary),
+                .setCustomId('view_tribune')
+                .setLabel('Трибуны')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId('view_my_reprimands')
                 .setLabel('Выговоры')
-                .setStyle(ButtonStyle.Danger)
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('view_history')
+                .setLabel('История')
+                .setStyle(ButtonStyle.Secondary)
         );
-        rows.push(mainRow);
 
-        // Второй ряд: Админ-панель для кураторов
+        const rows = [row1, row2];
+
+        // Третий ряд: Админ-панель для кураторов
         if (curatorStatus) {
             const curatorRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
@@ -96,7 +101,6 @@ export default {
             rows.push(curatorRow);
         }
 
-        // Отправляем приватно (ephemeral)
         await interaction.reply({ files: [attachment], components: rows, ephemeral: true });
     },
 };

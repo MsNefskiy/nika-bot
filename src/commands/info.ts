@@ -46,7 +46,7 @@ export default {
         const hasNorma = historyCount > 0;
 
         // Показ прогресса (deferred) так как генерация картинки может занять время
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
 
         // Отрисовка
         const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });
