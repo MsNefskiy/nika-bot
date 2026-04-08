@@ -52,12 +52,15 @@ export default {
 
         // Отрисовка профиля
         const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });
+        const roleName = member?.roles?.highest?.name || 'Пользователь';
+
         const buffer = await CanvasHelper.drawProfileCard(
             targetUser.username, 
             avatarUrl,
             hasNorma, 
             dbUser.stars, 
-            dbUser.joinedAt
+            dbUser.joinedAt,
+            roleName
         );
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 
@@ -100,7 +103,11 @@ export default {
                 new ButtonBuilder()
                     .setCustomId('admin_remove_reprimand')
                     .setLabel('Снять выговор')
-                    .setStyle(ButtonStyle.Secondary)
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('admin_view_norms')
+                    .setLabel('Норма ведущих')
+                    .setStyle(ButtonStyle.Primary)
             );
             rows.push(curatorRow);
         }

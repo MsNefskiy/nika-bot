@@ -71,7 +71,7 @@ export class CanvasHelper {
         ctx.shadowBlur = 0;
     }
 
-    static async drawProfileCard(username: string, avatarUrl: string, hasNorma: boolean, stars: number, joinedAt: Date) {
+    static async drawProfileCard(username: string, avatarUrl: string, hasNorma: boolean, stars: number, joinedAt: Date, roleName: string) {
         const width = 700;
         const height = 300;
         const canvas = createCanvas(width, height);
@@ -120,6 +120,11 @@ export class CanvasHelper {
         ctx.textAlign = 'left';
         ctx.fillText(username, nameX + 20, nameY + 40);
 
+        // --- РОЛЬ ---
+        ctx.font = 'italic 20px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillText(roleName, nameX + 20, nameY + 85);
+
         // --- 3. ЗВЕЗДЫ ---
         ctx.font = 'bold 30px "Segoe UI Emoji", sans-serif';
         ctx.fillStyle = '#FFD700';
@@ -144,7 +149,7 @@ export class CanvasHelper {
         ctx.textAlign = 'right';
         
         const normEmoji = hasNorma ? '✅' : '❌';
-        ctx.fillText(`Норма ${normEmoji}`, width - 50, height - 45);
+        ctx.fillText(`Норма: ${normEmoji}`, width - 50, height - 45);
 
         return canvas.toBuffer();
     }
@@ -304,6 +309,76 @@ export class CanvasHelper {
                 ctx.fillText('СВОБОДНО', slot.x, slot.y + 20);
             }
         });
+
+        return canvas.toBuffer();
+    }
+
+    // НОРМА ВЕДУЩИХ (КУРАТОРЫ)
+    static async drawHostsNormaCard(hostData: { username: string, hasNorma: boolean }[]) {
+        const width = 1000;
+        const height = 800; // Немного выше для большого списка
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        await this.drawBase(ctx, width, height);
+
+        const commonGrad = ctx.createLinearGradient(0, 0, width, height);
+        commonGrad.addColorStop(0, '#a76eff');
+        commonGrad.addColorStop(1, '#ff6e6e');
+
+        // Заголовок
+        ctx.font = 'bold 42px "Segoe UI Emoji", sans-serif';
+        ctx.fillStyle = commonGrad;
+        ctx.textAlign = 'center';
+        ctx.fillText('📋 СТАТУС НОРМЫ ВЕДУЩИХ', width / 2, 80);
+
+        // Линия разделитель
+        ctx.strokeStyle = 'rgba(167, 110, 255, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(100, 115);
+        ctx.lineTo(width - 100, 115);
+        ctx.stroke();
+
+        // Сетка (2 колонки)
+        const startX = 80;
+        const startY = 180;
+        const colWidth = 440;
+        const rowHeight = 45;
+        const itemsPerCol = 13;
+
+        ctx.font = '22px "Segoe UI Emoji", sans-serif';
+        ctx.textAlign = 'left';
+
+        hostData.forEach((host, index) => {
+            if (index >= 26) return; // Лимит на 26 человек для одной карточки
+            const col = index < itemsPerCol ? 0 : 1;
+            const row = index % itemsPerCol;
+            const x = startX + col * colWidth;
+            const y = startY + row * rowHeight;
+
+            const statusEmoji = host.hasNorma ? '✅' : '❌';
+            
+            // Задний фон для строки (чередование для читаемости)
+            if (index % 2 === 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+                this.drawRoundedRect(ctx, x - 10, y - 28, colWidth - 20, 38, 5);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#FFFFFF';
+            const name = host.username.length > 20 ? host.username.substring(0, 18) + '..' : host.username;
+            ctx.fillText(name, x, y);
+
+            ctx.textAlign = 'right';
+            ctx.fillText(statusEmoji, x + colWidth - 40, y);
+            ctx.textAlign = 'left';
+        });
+
+        // Футер
+        ctx.font = 'italic 16px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.textAlign = 'center';
+        ctx.fillText('Норма: хотя бы один эфир за последние 14 дней', width / 2, height - 40);
 
         return canvas.toBuffer();
     }

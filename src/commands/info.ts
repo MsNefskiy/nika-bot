@@ -54,12 +54,16 @@ export default {
 
         // Отрисовка
         const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });
+        const member = interaction.member as any;
+        const roleName = member?.roles?.highest?.name || 'Пользователь';
+
         const buffer = await CanvasHelper.drawProfileCard(
             targetUser.username, 
             avatarUrl,
             hasNorma, 
             dbUser.stars, 
-            dbUser.joinedAt
+            dbUser.joinedAt,
+            roleName
         );
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 

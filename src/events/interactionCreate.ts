@@ -64,6 +64,9 @@ export default {
                 // --- МАГАЗИН ---
                 if (id === 'view_shop') await handleShopView(interaction);
                 if (id.startsWith('confirm_buy:')) await processPurchase(interaction, id.split(':')[1], client);
+
+                // --- НОРМА ВЕДУЩИХ (АДМИН) ---
+                if (id === 'admin_view_norms') await viewHostsNorms(interaction);
             }
 
             if (interaction.isStringSelectMenu()) {
@@ -536,3 +539,57 @@ async function clearHistory(interaction: ButtonInteraction) {
 async function showEventSelector(interaction: ButtonInteraction) { const select = new StringSelectMenuBuilder().setCustomId('select_event_type').setPlaceholder('Выберите тип').addOptions(new StringSelectMenuOptionBuilder().setLabel('Синяя кнопка').setValue('Синяя кнопка'), new StringSelectMenuOptionBuilder().setLabel('Быстрые свидания').setValue('Быстрые свидания'), new StringSelectMenuOptionBuilder().setLabel('Шоу талантов').setValue('Шоу талантов'), new StringSelectMenuOptionBuilder().setLabel('Любовь в вопросах').setValue('Любовь в вопросах'), new StringSelectMenuOptionBuilder().setLabel('Любовное колесо').setValue('Любовное колесо'), new StringSelectMenuOptionBuilder().setLabel('Давай поженимся').setValue('Давай поженимся')); await interaction.update({ content: 'Тип трибуны:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], files: [] }); }
 async function showDateModal(interaction: any, eventType: string) { const modal = new ModalBuilder().setCustomId(`modal_create_tribune:${eventType}`).setTitle('Параметры'); modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('date_input').setLabel("Дата/время").setStyle(TextInputStyle.Short).setRequired(true))); await interaction.showModal(modal); }
 async function createTribuneInDb(interaction: any, type: string, dateTime: string) { await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); await interaction.reply({ content: `✅ Создано!`, ephemeral: true }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
+async function viewHostsNorms(interaction: ButtonInteraction) {
+    if (!isCurator(interaction.user.id)) {
+        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const guild = interaction.guild;
+        if (!guild) return;
+
+        const HOST_ROLE_ID = '1264275526865129613';
+        const members = await guild.members.fetch();
+        const hosts = members.filter(m => m.roles.cache.has(HOST_ROLE_ID));
+
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+        // Получаем всех пользователей-ведущих из базы
+        const hostIds = hosts.map(h => h.id);
+        const hostDataFromDb = await prisma.user.findMany({
+            where: { discordId: { in: hostIds } },
+            include: {
+                _count: {
+                    select: {
+                        tribuneHistory: {
+                            where: { closedAt: { gte: twoWeeksAgo } }
+                        }
+                    }
+                }
+            }
+        });
+
+        const dataForCard = hosts.map(member => {
+            const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
+            const hasNorma = (dbUser?._count?.tribuneHistory || 0) > 0;
+            return {
+                username: member.displayName,
+                hasNorma
+            };
+        });
+
+        // Сортировка: сначала те, у кого есть норма, потом остальные (или по алфавиту)
+        dataForCard.sort((a, b) => b.username.localeCompare(a.username));
+
+        const buffer = await CanvasHelper.drawHostsNormaCard(dataForCard);
+        const attachment = new AttachmentBuilder(buffer, { name: 'hosts_norma.png' });
+
+        await interaction.editReply({ files: [attachment] });
+    } catch (e) {
+        console.error('Ошибка при просмотре норм:', e);
+        await interaction.editReply({ content: 'Произошла ошибка при формировании таблицы.' });
+    }
+}
