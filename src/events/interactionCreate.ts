@@ -103,6 +103,10 @@ export default {
                     const reason = interaction.fields.getTextInputValue('reprimand_reason');
                     await saveReprimand(interaction, targetId, reason, client);
                 }
+                if (interaction.customId === 'modal_remove_reprimand_id') {
+                    const targetId = interaction.fields.getTextInputValue('target_id');
+                    await showReprimandsToRemove(interaction, targetId);
+                }
             }
         } catch (error) {
             console.error('Interaction Error:', error);
@@ -264,32 +268,44 @@ async function saveReprimand(interaction: ModalSubmitInteraction, targetId: stri
 }
 
 async function initiateReprimandRemove(interaction: ButtonInteraction) {
-    const users = await prisma.user.findMany({ take: 25, orderBy: { createdAt: 'desc' } });
-    const select = new StringSelectMenuBuilder()
-        .setCustomId('select_target_for_remove_reprimand')
-        .setPlaceholder('Выберите пользователя')
-        .addOptions(users.map(u => new StringSelectMenuOptionBuilder().setLabel(u.username).setValue(u.discordId)));
+    const modal = new ModalBuilder()
+        .setCustomId('modal_remove_reprimand_id')
+        .setTitle('Снятие выговора');
 
-    await interaction.reply({ 
-        content: '🛡️ С кого снять выговор?', 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], 
-        ephemeral: true 
-    });
+    const idInput = new TextInputBuilder()
+        .setCustomId('target_id')
+        .setLabel('ID пользователя')
+        .setPlaceholder('Введите ID пользователя для поиска выговоров')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(idInput));
+
+    await interaction.showModal(modal);
 }
 
-async function showReprimandsToRemove(interaction: StringSelectMenuInteraction, targetId: string) {
+async function showReprimandsToRemove(interaction: ModalSubmitInteraction | StringSelectMenuInteraction, targetId: string) {
     const reprimands = await (prisma as any).reprimand.findMany({ where: { userId: targetId }, take: 25 });
-    if (reprimands.length === 0) return interaction.update({ content: 'У этого пользователя нет выговоров.', components: [] });
+    
+    if (reprimands.length === 0) {
+        const msg = { content: '❌ У этого пользователя нет активных выговоров в базе.', components: [], ephemeral: true };
+        if (interaction.isModalSubmit()) return interaction.reply(msg);
+        else return interaction.update(msg);
+    }
 
     const select = new StringSelectMenuBuilder()
         .setCustomId('select_reprimand_to_delete')
         .setPlaceholder('Выберите выговор для удаления')
         .addOptions(reprimands.map((r: any) => new StringSelectMenuOptionBuilder().setLabel(r.reason.substring(0, 50)).setValue(r.id)));
 
-    await interaction.update({ 
+    const replyData = { 
         content: `Список выговоров <@${targetId}>:`, 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
-    });
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+        ephemeral: true
+    };
+
+    if (interaction.isModalSubmit()) await interaction.reply(replyData);
+    else await interaction.update(replyData);
 }
 
 async function finalizeReprimandRemove(interaction: StringSelectMenuInteraction, reprimandId: string, client: MyClient) {
