@@ -521,9 +521,21 @@ async function completeTribune(interaction: ButtonInteraction) {
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
     const hostIds = [activeTribune.slot1_1, activeTribune.slot1_2, activeTribune.slot2_1, activeTribune.slot2_2].filter(id => id !== null) as string[];
+    
+    // Сохраняем историю
     await prisma.tribuneHistory.create({ data: { type: activeTribune.type, startTime: activeTribune.dateTime, hostId: interaction.user.id, participants: hostIds.join(',') } });
+    
+    // Обновляем норму для всех ведущих
+    for (const hostId of hostIds) {
+        await prisma.user.upsert({
+            where: { discordId: hostId },
+            update: { hasNorma: true, normaLastUpdated: new Date() },
+            create: { discordId: hostId, username: 'Ведущий', hasNorma: true, normaLastUpdated: new Date() }
+        }).catch(e => console.error(`Ошибка нормы для ${hostId}:`, e));
+    }
+
     await prisma.tribune.delete({ where: { id: activeTribune.id } });
-    await interaction.update({ content: '✅ Трибуна завершена!', components: [], files: [] });
+    await interaction.update({ content: '✅ Трибуна завершена! Норма ведущим проставлена.', components: [], files: [] });
     setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
 
@@ -616,21 +628,21 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
         // Получаем всех пользователей-ведущих из базы
         const hostIds = hosts.map(h => h.id);
         const hostDataFromDb = await prisma.user.findMany({
-            where: { discordId: { in: hostIds } },
-            include: {
-                _count: {
-                    select: {
-                        tribuneHistory: {
-                            where: { closedAt: { gte: twoWeeksAgo } }
-                        }
-                    }
-                }
-            }
+            where: { discordId: { in: hostIds } }
         });
 
         const dataForCard = hosts.map(member => {
             const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
-            const hasNorma = (dbUser?._count?.tribuneHistory || 0) > 0;
+            let hasNorma = false;
+            
+            if (dbUser?.hasNorma && dbUser.normaLastUpdated) {
+                const twoWeeksInMs = 14 * 24 * 60 * 60 * 1000;
+                const timePassed = new Date().getTime() - dbUser.normaLastUpdated.getTime();
+                if (timePassed < twoWeeksInMs) {
+                    hasNorma = true;
+                }
+            }
+
             return {
                 username: member.displayName,
                 hasNorma

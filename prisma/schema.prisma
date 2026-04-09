@@ -20,6 +20,10 @@ model User {
   isTaskDone       Boolean   @default(false)
   isTaskPending    Boolean   @default(false)
 
+  // Статус Нормы (для ведущих)
+  hasNorma         Boolean   @default(false)
+  normaLastUpdated DateTime?
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   

@@ -37,18 +37,15 @@ export default {
             }
         });
 
-        // Проверка Нормы (последние 2 недели)
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
-        const historyCount = await prisma.tribuneHistory.count({
-            where: {
-                hostId: targetUser.id,
-                closedAt: { gte: twoWeeksAgo }
+        // Проверка Нормы (14 дней)
+        let hasNorma = false;
+        if (dbUser.hasNorma && dbUser.normaLastUpdated) {
+            const twoWeeksInMs = 14 * 24 * 60 * 60 * 1000;
+            const timePassed = new Date().getTime() - dbUser.normaLastUpdated.getTime();
+            if (timePassed < twoWeeksInMs) {
+                hasNorma = true;
             }
-        });
-
-        const hasNorma = historyCount > 0;
+        }
 
         // Отрисовка профиля
         const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });
