@@ -54,7 +54,7 @@ export default {
             }
 
             // 2. Создаем запись в БД
-            const tiktok = await prisma.tiktok.create({
+            const tiktok = await prisma.tikTok.create({
                 data: {
                     userId: interaction.user.id,
                     url,

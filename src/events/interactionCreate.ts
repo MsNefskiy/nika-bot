@@ -684,7 +684,7 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
                     }
                 }
             }
-        });
+        }) as any[];
 
         const dataForCard = hosts.map(member => {
             const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
@@ -708,10 +708,10 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
 }
 
 async function approveTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
-    const tiktok = await prisma.tiktok.findUnique({ where: { id: tiktokId } });
+    const tiktok = await prisma.tikTok.findUnique({ where: { id: tiktokId } });
     if (!tiktok) return interaction.update({ content: '❌ ТикТок не найден.', components: [] });
 
-    await prisma.tiktok.update({
+    await prisma.tikTok.update({
         where: { id: tiktokId },
         data: { status: 'APPROVED' }
     });
@@ -729,10 +729,10 @@ async function approveTikTok(interaction: ButtonInteraction, tiktokId: string, c
 }
 
 async function denyTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
-    const tiktok = await prisma.tiktok.findUnique({ where: { id: tiktokId } });
+    const tiktok = await prisma.tikTok.findUnique({ where: { id: tiktokId } });
     if (!tiktok) return interaction.update({ content: '❌ ТикТок не найден.', components: [] });
 
-    await prisma.tiktok.update({
+    await prisma.tikTok.update({
         where: { id: tiktokId },
         data: { status: 'DENIED' }
     });
