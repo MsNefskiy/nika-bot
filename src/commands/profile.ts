@@ -52,15 +52,12 @@ export default {
 
         // Отрисовка профиля
         const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });
-        const roleName = member?.roles?.highest?.name || 'Пользователь';
-
         const buffer = await CanvasHelper.drawProfileCard(
             targetUser.username, 
             avatarUrl,
             hasNorma, 
             dbUser.stars, 
-            dbUser.joinedAt,
-            roleName
+            dbUser.joinedAt
         );
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 

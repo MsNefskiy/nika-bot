@@ -71,7 +71,7 @@ export class CanvasHelper {
         ctx.shadowBlur = 0;
     }
 
-    static async drawProfileCard(username: string, avatarUrl: string, hasNorma: boolean, stars: number, joinedAt: Date, roleName: string) {
+    static async drawProfileCard(username: string, avatarUrl: string, hasNorma: boolean, stars: number, joinedAt: Date) {
         const width = 700;
         const height = 300;
         const canvas = createCanvas(width, height);
@@ -119,11 +119,6 @@ export class CanvasHelper {
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'left';
         ctx.fillText(username, nameX + 20, nameY + 40);
-
-        // --- РОЛЬ ---
-        ctx.font = 'italic 20px sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillText(roleName, nameX + 20, nameY + 85);
 
         // --- 3. ЗВЕЗДЫ ---
         ctx.font = 'bold 30px "Segoe UI Emoji", sans-serif';
