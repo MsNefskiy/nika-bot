@@ -23,6 +23,7 @@ model User {
   // Статус Нормы (для ведущих)
   hasNorma         Boolean   @default(false)
   normaLastUpdated DateTime?
+  tiktokNormaLastUpdated DateTime?
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

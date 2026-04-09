@@ -89,7 +89,7 @@ export default {
 
         // Третий ряд: Админ-панель для кураторов
         if (curatorStatus) {
-            const curatorRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const curatorRow1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('admin_issue_reprimand')
                     .setLabel('Выдать выговор')
@@ -99,15 +99,27 @@ export default {
                     .setLabel('Снять выговор')
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
+                    .setCustomId('admin_norma_manage')
+                    .setLabel('🔧 Управление нормой')
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+            const curatorRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('admin_view_host_list')
+                    .setLabel('📋 Список ведущих')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
                     .setCustomId('admin_view_norms')
                     .setLabel('Норма ведущих')
-                    .setStyle(ButtonStyle.Primary),
+                    .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('admin_view_tiktok_norms')
                     .setLabel('Норма ТикТоков')
                     .setStyle(ButtonStyle.Secondary)
             );
-            rows.push(curatorRow);
+
+            rows.push(curatorRow1, curatorRow2);
         }
 
         await interaction.reply({ files: [attachment], components: rows, ephemeral: true });

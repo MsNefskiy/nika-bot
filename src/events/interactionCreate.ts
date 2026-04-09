@@ -65,19 +65,25 @@ export default {
                 if (id === 'view_shop') await handleShopView(interaction);
                 if (id.startsWith('confirm_buy:')) await processPurchase(interaction, id.split(':')[1], client);
 
-                // --- НОРМА ВЕДУЩИХ (АДМИН) ---
-                if (id === 'admin_view_norms') await viewHostsNorms(interaction);
-                if (id === 'admin_view_tiktok_norms') await viewHostsTikTokNorms(interaction);
-
+                // --- УПРАВЛЕНИЕ НОРМОЙ (АДМИН) ---
+                if (id === 'admin_norma_manage') await startNormaManage(interaction as ButtonInteraction);
+                if (id.startsWith('norma_action:')) await chooseNormaType(interaction as ButtonInteraction, id.split(':')[1]);
+                if (id.startsWith('norma_type:')) await chooseNormaUser(interaction as ButtonInteraction, id.split(':')[1], id.split(':')[2]);
+                
                 // --- ТИКТОКИ (ОДОБРЕНИЕ) ---
-                if (id.startsWith('approve_tiktok_')) await approveTikTok(interaction, id.split('_')[2], client);
-                if (id.startsWith('deny_tiktok_')) await denyTikTok(interaction, id.split('_')[2], client);
+                if (id.startsWith('approve_tiktok_')) await approveTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
+                if (id.startsWith('deny_tiktok_')) await denyTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
             }
 
             if (interaction.isStringSelectMenu()) {
+                if (interaction.customId.startsWith('norma_user_select:')) {
+                    const [, action, type] = interaction.customId.split(':');
+                    await handleNormaUserSelection(interaction as StringSelectMenuInteraction, action, type, (interaction as StringSelectMenuInteraction).values[0]);
+                }
+
                 if (interaction.customId === 'select_event_type') {
                     await interaction.message.delete().catch(() => {});
-                    await showDateModal(interaction, (interaction as StringSelectMenuInteraction).values[0]);
+                    await showDateModal(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0]);
                 }
                 if (interaction.customId === 'select_leave_slot') {
                     await leaveSpecificSlot(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0]);
@@ -96,6 +102,11 @@ export default {
             }
 
             if (interaction.isModalSubmit()) {
+                if (interaction.customId.startsWith('modal_norma_date:')) {
+                    const [, type, targetId] = interaction.customId.split(':');
+                    const dateStr = interaction.fields.getTextInputValue('norma_date_input');
+                    await finalizeNormaIssue(interaction, type, targetId, dateStr, client);
+                }
                 if (interaction.customId.startsWith('modal_create_tribune')) {
                     const type = interaction.customId.split(':')[1];
                     const dateTime = interaction.fields.getTextInputValue('date_input');
@@ -371,7 +382,10 @@ async function handleTasksView(interaction: ButtonInteraction) {
     let statusText = '📝 Твое задание на сегодня:';
     if (isTaskPending) statusText = '⏳ Задание на проверке у кураторов:';
     if (isTaskDone) statusText = '✅ Ты уже выполнил задание на сегодня:';
-    const embed = new EmbedBuilder().setTitle('📅 Ежедневное задание').setDescription(`${statusText}\n\n>>> **${taskText}**`).setColor(isTaskDone ? '#00ff00' : (isTaskPending ? '#ffff00' : '#00ffff'));
+    const embed = new EmbedBuilder()
+        .setTitle('📅 Ежедневное задание')
+        .setDescription(`${statusText}\n\n>>> **${taskIndex! + 1}. ${taskText}**`)
+        .setColor(isTaskDone ? '#00ff00' : (isTaskPending ? '#ffff00' : '#00ffff'));
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('submit_task').setLabel('Выполнено').setStyle(ButtonStyle.Success).setDisabled(isTaskDone || isTaskPending));
     await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
 }
@@ -381,7 +395,10 @@ async function submitTaskToCurators(interaction: ButtonInteraction, client: MyCl
     if (!user || user.currentTaskIndex === null) return;
     await prisma.user.update({ where: { discordId: interaction.user.id }, data: { isTaskPending: true } });
     
-    const embed = new EmbedBuilder().setTitle('📢 Новое выполненное задание!').setDescription(`Пользователь <@${interaction.user.id}> утверждает, что выполнил задание:\n\n**${tasks[user.currentTaskIndex]}**`).setColor('#7289da');
+    const embed = new EmbedBuilder()
+        .setTitle('📢 Новое выполненное задание!')
+        .setDescription(`Пользователь <@${interaction.user.id}> утверждает, что выполнил задание:\n\n**${user.currentTaskIndex + 1}. ${tasks[user.currentTaskIndex]}**`)
+        .setColor('#7289da');
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`approve_task_${interaction.user.id}`).setLabel('Да, принять').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_task_${interaction.user.id}`).setLabel('Нет, отклонить').setStyle(ButtonStyle.Danger));
 
     // Уведомляем только ответственных за задания
@@ -629,11 +646,9 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
         const guild = interaction.guild;
         if (!guild) return;
 
-        const HOST_ROLE_ID = '1264275526865129613';
         const members = await guild.members.fetch();
-        const hosts = members.filter(m => m.roles.cache.has(HOST_ROLE_ID));
+        const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
 
-        // Получаем всех пользователей-ведущих из базы
         const hostIds = hosts.map(h => h.id);
         const hostDataFromDb = await prisma.user.findMany({
             where: { discordId: { in: hostIds } }
@@ -643,7 +658,8 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
             const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
             let hasNorma = false;
             
-            if (dbUser?.hasNorma && dbUser.normaLastUpdated) {
+            // Проверка автоматической нормы (через трибуны) и ручной
+            if (dbUser?.normaLastUpdated) {
                 const twoWeeksInMs = 14 * 24 * 60 * 60 * 1000;
                 const timePassed = new Date().getTime() - dbUser.normaLastUpdated.getTime();
                 if (timePassed < twoWeeksInMs) {
@@ -665,7 +681,7 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
             .setDescription(
                 dataForTable.map((h, i) => `${i + 1}. **${h.username}** — ${h.hasNorma ? '✅' : '❌'}`).join('\n') || 'Ведущие не найдены.'
             )
-            .setFooter({ text: 'Норма: хотя бы один эфир за последние 14 дней' })
+            .setFooter({ text: 'Норма: эфир или ручное подтверждение за последние 14 дней' })
             .setTimestamp();
 
         await interaction.editReply({ embeds: [embed] });
@@ -674,7 +690,6 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
         await interaction.editReply({ content: 'Произошла ошибка при формировании таблицы.' });
     }
 }
-
 
 async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
@@ -687,14 +702,12 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
         const guild = interaction.guild;
         if (!guild) return;
 
-        const HOST_ROLE_ID = '1264275526865129613';
         const members = await guild.members.fetch();
-        const hosts = members.filter(m => m.roles.cache.has(HOST_ROLE_ID));
+        const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
 
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-        // Получаем всех пользователей-ведущих из базы с их тиктоками
         const hostIds = hosts.map(h => h.id);
         const hostDataFromDb = await prisma.user.findMany({
             where: { discordId: { in: hostIds } },
@@ -714,7 +727,19 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
 
         const dataForTable = hosts.map(member => {
             const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
-            const hasNorma = (dbUser?._count?.tiktoks || 0) > 0;
+            
+            // Автоматическая норма (одобренные ТТ за неделю)
+            let hasNorma = (dbUser?._count?.tiktoks || 0) > 0;
+            
+            // Ручная норма (проверка tiktokNormaLastUpdated)
+            if (!hasNorma && dbUser?.tiktokNormaLastUpdated) {
+                const oneWeekInMs = 7 * 24 * 60 * 60 * 1000;
+                const timePassed = new Date().getTime() - dbUser.tiktokNormaLastUpdated.getTime();
+                if (timePassed < oneWeekInMs) {
+                    hasNorma = true;
+                }
+            }
+
             return {
                 username: member.displayName,
                 hasNorma
@@ -729,7 +754,7 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
             .setDescription(
                 dataForTable.map((h, i) => `${i + 1}. **${h.username}** — ${h.hasNorma ? '✅' : '❌'}`).join('\n') || 'Ведущие не найдены.'
             )
-            .setFooter({ text: 'Норма: 1 одобренный ТикТок за последние 7 дней' })
+            .setFooter({ text: 'Норма: 1 одобренный ТикТок или ручное подтверждение за 7 дней' })
             .setTimestamp();
 
         await interaction.editReply({ embeds: [embed] });
@@ -779,5 +804,262 @@ async function denyTikTok(interaction: ButtonInteraction, tiktokId: string, clie
     const targetUser = await client.users.fetch(tiktok.userId).catch(() => null);
     if (targetUser) {
         await targetUser.send(`❌ **Ваше видео было отклонено куратором.**\n>>> Пожалуйста, проверьте правила публикации и попробуйте еще раз.`).catch(() => {});
+    }
+}
+
+async function viewDetailedHostList(interaction: ButtonInteraction) {
+    if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const guild = interaction.guild;
+        if (!guild) return;
+
+        // 1. Получаем участников с ролью ведущего
+        const members = await guild.members.fetch();
+        const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
+
+        if (hosts.size === 0) {
+            return interaction.editReply({ content: 'Ведущие с указанной ролью не найдены.' });
+        }
+
+        // 2. Получаем данные из БД
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+        const hostIds = Array.from(hosts.keys());
+        
+        // Все выговоры для этих пользователей
+        const allReprimands = await (prisma as any).reprimand.findMany({
+            where: { userId: { in: hostIds } },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // История трибун за 14 дней
+        const tribuneHistory = await prisma.tribuneHistory.findMany({
+            where: {
+                closedAt: { gte: twoWeeksAgo }
+            },
+            orderBy: { closedAt: 'desc' }
+        });
+
+        // 3. Формируем отчет
+        const embeds = [];
+        let currentEmbed = new EmbedBuilder()
+            .setTitle('📋 Детальный список состава')
+            .setColor('#a76eff')
+            .setTimestamp();
+
+        let fieldCount = 0;
+
+        for (const [id, member] of hosts) {
+            // Выговоры
+            const userReprimands = allReprimands.filter((r: any) => r.userId === id);
+            const reprimandText = userReprimands.length > 0 
+                ? userReprimands.map((r: any) => `• <t:${Math.floor(r.createdAt.getTime() / 1000)}:d> — ${r.reason}`).join('\n')
+                : '*Нет активных выговоров*';
+
+            // Трибуны
+            const userTribunes = tribuneHistory.filter(h => 
+                h.hostId === id || h.participants?.includes(id)
+            );
+            const manualTribunePass = await prisma.user.findUnique({ where: { discordId: id } }).then(u => u?.normaLastUpdated);
+            const isManualTribunePass = manualTribunePass ? (new Date().getTime() - manualTribunePass.getTime() < 14 * 24 * 60 * 60 * 1000) : false;
+
+            const tribuneCount = userTribunes.length;
+            const tribuneDetails = userTribunes.length > 0
+                ? userTribunes.map(h => `• ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`).slice(0, 5).join('\n') + (userTribunes.length > 5 ? '\n*...и еще другие*' : '')
+                : (isManualTribunePass ? '*Норма выдана вручную куратором*' : '*Нет проведенных трибун за 14 дней*');
+
+            const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n\n**🎤 Трибуны (2 нед): ${tribuneCount}**\n${tribuneDetails}`;
+
+            currentEmbed.addFields({
+                name: `👤 ${member.displayName} (${member.user.username})`,
+                value: fieldValue.substring(0, 1024),
+                inline: false
+            });
+
+            fieldCount++;
+
+            if (fieldCount >= 10) { 
+                embeds.push(currentEmbed);
+                currentEmbed = new EmbedBuilder()
+                    .setTitle('📋 Детальный список состава (продолжение)')
+                    .setColor('#a76eff')
+                    .setTimestamp();
+                fieldCount = 0;
+            }
+        }
+
+        if (fieldCount > 0) {
+            embeds.push(currentEmbed);
+        }
+
+        await interaction.editReply({ embeds: [embeds[0]] });
+        for (let i = 1; i < embeds.length; i++) {
+            await interaction.followUp({ embeds: [embeds[i]], ephemeral: true });
+        }
+
+    } catch (e) {
+        console.error('Ошибка при формировании списка ведущих:', e);
+        await interaction.editReply({ content: '❌ Произошла ошибка при сборе данных.' });
+    }
+}
+
+// --- УПРАВЛЕНИЕ НОРМОЙ ---
+
+async function startNormaManage(interaction: ButtonInteraction) {
+    if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('⚙️ Управление нормой')
+        .setDescription('Выберите действие, которое хотите совершить:')
+        .setColor('#5865F2');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId('norma_action:issue')
+            .setLabel('Выдать норму')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('norma_action:remove')
+            .setLabel('Снять норму')
+            .setStyle(ButtonStyle.Danger)
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
+
+async function chooseNormaType(interaction: ButtonInteraction, action: string) {
+    const embed = new EmbedBuilder()
+        .setTitle(`⚙️ ${action === 'issue' ? 'Выдача' : 'Снятие'} нормы`)
+        .setDescription('Выберите тип нормы:')
+        .setColor('#5865F2');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`norma_type:${action}:tribune`)
+            .setLabel('Трибуны')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId(`norma_type:${action}:tiktok`)
+            .setLabel('ТикТоки')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function chooseNormaUser(interaction: ButtonInteraction, action: string, type: string) {
+    const guild = interaction.guild;
+    if (!guild) return;
+
+    const members = await guild.members.fetch();
+    const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
+
+    if (hosts.size === 0) {
+        return interaction.update({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
+    }
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(`norma_user_select:${action}:${type}`)
+        .setPlaceholder('Выберите ведущего...')
+        .addOptions(
+            Array.from(hosts.values()).slice(0, 25).map(m => 
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(m.displayName)
+                    .setValue(m.id)
+                    .setDescription(m.user.username)
+            )
+        );
+
+    const embed = new EmbedBuilder()
+        .setTitle(`⚙️ ${action === 'issue' ? 'Выдача' : 'Снятие'} нормы: ${type === 'tribune' ? 'Трибуны' : 'ТикТоки'}`)
+        .setDescription('Выберите пользователя из списка:')
+        .setColor('#5865F2');
+
+    await interaction.update({ 
+        embeds: [embed], 
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
+    });
+}
+
+async function handleNormaUserSelection(interaction: StringSelectMenuInteraction, action: string, type: string, targetId: string) {
+    if (action === 'remove') {
+        const updateData = type === 'tribune' 
+            ? { hasNorma: false, normaLastUpdated: null } 
+            : { tiktokNormaLastUpdated: null };
+
+        await prisma.user.update({
+            where: { discordId: targetId },
+            data: updateData as any
+        });
+
+        return interaction.update({ 
+            content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}** для <@${targetId}> успешно снята.`, 
+            embeds: [], 
+            components: [] 
+        });
+    }
+
+    // Если выдача - показываем модал
+    const modal = new ModalBuilder()
+        .setCustomId(`modal_norma_date:${type}:${targetId}`)
+        .setTitle('Выдача нормы');
+
+    const dateInput = new TextInputBuilder()
+        .setCustomId('norma_date_input')
+        .setLabel('Дата (ДД.ММ.ГГГГ)')
+        .setPlaceholder('Пример: 10.04.2024')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(10)
+        .setMaxLength(10);
+
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(dateInput));
+
+    await interaction.showModal(modal);
+}
+
+async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: string, targetId: string, dateStr: string, client: MyClient) {
+    // Валидация даты
+    const datePattern = /^(\d{2})\.(\d{2})\.(\d{4})$/;
+    const match = dateStr.match(datePattern);
+
+    if (!match) {
+        return interaction.reply({ content: '❌ Неверный формат даты! Используйте ДД.ММ.ГГГГ', ephemeral: true });
+    }
+
+    const [, d, m, y] = match;
+    const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0);
+
+    if (isNaN(date.getTime())) {
+        return interaction.reply({ content: '❌ Введена некорректная дата!', ephemeral: true });
+    }
+
+    const updateData = type === 'tribune'
+        ? { hasNorma: true, normaLastUpdated: date }
+        : { tiktokNormaLastUpdated: date };
+
+    await prisma.user.upsert({
+        where: { discordId: targetId },
+        update: updateData as any,
+        create: { discordId: targetId, username: 'Ведущий', ...updateData } as any
+    });
+
+    await interaction.reply({ 
+        content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТоки'}** для <@${targetId}> выдана от даты **${dateStr}**!`, 
+        ephemeral: true 
+    });
+
+    // Уведомление в ЛС
+    const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
+    if (member) {
+        await member.send(`🌟 **Куратор подтвердил вашу норму по ${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}!**\nДата подтверждения: **${dateStr}**`).catch(() => {});
     }
 }

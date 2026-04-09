@@ -8,8 +8,7 @@ export interface ShopItem {
 export const shopItems: ShopItem[] = [
     { id: 'profile_force', name: 'Заставить поставить профиль', price: 600, desc: 'На сервере Lounge' },
     { id: 'timeout_10min', name: 'Тайм-аут на 10 минут', price: 600, desc: 'Без нарушения обязанностей' },
-    { id: 'remove_hard_reprimand', name: 'Снять строгий выговор', price: 800, desc: 'Не чаще 1 раза в 2 недели' },
-    { id: 'remove_soft_reprimand', name: 'Снять устный выговор', price: 750, desc: 'Не чаще 1 раза в 2 недели' },
+    { id: 'remove_hard_reprimand', name: 'Снять письменный выговор', price: 800, desc: 'Не чаще 1 раза в 2 недели' },
     { id: 'no_cd_tribune', name: 'Освобождение от кд трибун', price: 600, desc: 'Один и тот же человек 2 раза подряд' },
     { id: 'server_coins_1000', name: '1000 серверной валюты', price: 450, desc: 'Без лимита' },
     { id: 'private_room_month', name: 'Личная комната на месяц', price: 4000, desc: 'С возможностью продления' },
