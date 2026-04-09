@@ -484,6 +484,17 @@ function getUserSlots(tribune: any, userId: string): string[] { const slots = ['
 async function joinSlot(interaction: ButtonInteraction, slot: string) {
     const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!tribune || (tribune as any)[slot]) return;
+
+    const isFirstHalf = slot === 'slot1_1' || slot === 'slot1_2';
+    const isSecondHalf = slot === 'slot2_1' || slot === 'slot2_2';
+
+    if (isFirstHalf && (tribune.slot1_1 === interaction.user.id || tribune.slot1_2 === interaction.user.id)) {
+        return interaction.reply({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', ephemeral: true });
+    }
+    if (isSecondHalf && (tribune.slot2_1 === interaction.user.id || tribune.slot2_2 === interaction.user.id)) {
+        return interaction.reply({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', ephemeral: true });
+    }
+
     await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: interaction.user.id } });
     await updateTribuneMessage(interaction);
 }
