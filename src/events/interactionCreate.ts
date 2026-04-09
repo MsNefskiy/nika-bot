@@ -633,16 +633,13 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
         const members = await guild.members.fetch();
         const hosts = members.filter(m => m.roles.cache.has(HOST_ROLE_ID));
 
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
         // Получаем всех пользователей-ведущих из базы
         const hostIds = hosts.map(h => h.id);
         const hostDataFromDb = await prisma.user.findMany({
             where: { discordId: { in: hostIds } }
         });
 
-        const dataForCard = hosts.map(member => {
+        const dataForTable = hosts.map(member => {
             const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
             let hasNorma = false;
             
@@ -660,18 +657,24 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
             };
         });
 
-        // Сортировка: сначала те, у кого есть норма, потом остальные (или по алфавиту)
-        dataForCard.sort((a, b) => b.username.localeCompare(a.username));
+        dataForTable.sort((a, b) => a.username.localeCompare(b.username));
 
-        const buffer = await CanvasHelper.drawHostsNormaCard(dataForCard);
-        const attachment = new AttachmentBuilder(buffer, { name: 'hosts_norma.png' });
+        const embed = new EmbedBuilder()
+            .setTitle('📋 Статус нормы ведущих')
+            .setColor('#a76eff')
+            .setDescription(
+                dataForTable.map((h, i) => `${i + 1}. **${h.username}** — ${h.hasNorma ? '✅' : '❌'}`).join('\n') || 'Ведущие не найдены.'
+            )
+            .setFooter({ text: 'Норма: хотя бы один эфир за последние 14 дней' })
+            .setTimestamp();
 
-        await interaction.editReply({ files: [attachment] });
+        await interaction.editReply({ embeds: [embed] });
     } catch (e) {
         console.error('Ошибка при просмотре норм:', e);
         await interaction.editReply({ content: 'Произошла ошибка при формировании таблицы.' });
     }
 }
+
 
 async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
@@ -709,7 +712,7 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
             }
         }) as any[];
 
-        const dataForCard = hosts.map(member => {
+        const dataForTable = hosts.map(member => {
             const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
             const hasNorma = (dbUser?._count?.tiktoks || 0) > 0;
             return {
@@ -718,17 +721,24 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
             };
         });
 
-        dataForCard.sort((a, b) => a.username.localeCompare(b.username));
+        dataForTable.sort((a, b) => a.username.localeCompare(b.username));
 
-        const buffer = await CanvasHelper.drawTikTokNormaCard(dataForCard);
-        const attachment = new AttachmentBuilder(buffer, { name: 'tiktoks_norma.png' });
+        const embed = new EmbedBuilder()
+            .setTitle('📋 Статус нормы ТикТоков')
+            .setColor('#a76eff')
+            .setDescription(
+                dataForTable.map((h, i) => `${i + 1}. **${h.username}** — ${h.hasNorma ? '✅' : '❌'}`).join('\n') || 'Ведущие не найдены.'
+            )
+            .setFooter({ text: 'Норма: 1 одобренный ТикТок за последние 7 дней' })
+            .setTimestamp();
 
-        await interaction.editReply({ files: [attachment] });
+        await interaction.editReply({ embeds: [embed] });
     } catch (e) {
         console.error('Ошибка при просмотре норм тиктоков:', e);
         await interaction.editReply({ content: 'Произошла ошибка при формировании таблицы.' });
     }
 }
+
 
 async function approveTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
     const tiktok = await prisma.tikTok.findUnique({ where: { id: tiktokId } });
