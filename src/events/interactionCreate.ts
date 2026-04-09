@@ -19,7 +19,7 @@ import { MyClient } from '../types';
 import { prisma } from '../handlers/db';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { tasks } from '../utils/tasks';
-import { CURATORS, isCurator, REPRIMAND_ROLE_ID } from '../utils/config';
+import { ADMIN_IDS, TASK_MANAGER_IDS, SHOP_MANAGER_IDS, isAdmin, isTaskManager, isShopManager, REPRIMAND_ROLE_ID } from '../utils/config';
 import { shopItems } from '../utils/shop';
 
 export default {
@@ -67,6 +67,11 @@ export default {
 
                 // --- НОРМА ВЕДУЩИХ (АДМИН) ---
                 if (id === 'admin_view_norms') await viewHostsNorms(interaction);
+                if (id === 'admin_view_tiktok_norms') await viewHostsTikTokNorms(interaction);
+
+                // --- ТИКТОКИ (ОДОБРЕНИЕ) ---
+                if (id.startsWith('approve_tiktok_')) await approveTikTok(interaction, id.split('_')[2], client);
+                if (id.startsWith('deny_tiktok_')) await denyTikTok(interaction, id.split('_')[2], client);
             }
 
             if (interaction.isStringSelectMenu()) {
@@ -204,9 +209,10 @@ async function processPurchase(interaction: ButtonInteraction, itemId: string, c
         .setDescription(`Пользователь <@${interaction.user.id}> купил: **${item.name}**\nЦена: **${item.price} звезд**\nПожалуйста, свяжитесь с ним для выдачи товара.`)
         .setTimestamp();
 
-    for (const curatorId of CURATORS) {
-        const curator = await client.users.fetch(curatorId).catch(() => null);
-        if (curator) await curator.send({ embeds: [notifyEmbed] }).catch(() => {});
+    // Уведомляем только ответственных за магазин
+    for (const managerId of SHOP_MANAGER_IDS) {
+        const manager = await client.users.fetch(managerId).catch(() => null);
+        if (manager) await manager.send({ embeds: [notifyEmbed] }).catch(() => {});
     }
 }
 
@@ -378,9 +384,10 @@ async function submitTaskToCurators(interaction: ButtonInteraction, client: MyCl
     const embed = new EmbedBuilder().setTitle('📢 Новое выполненное задание!').setDescription(`Пользователь <@${interaction.user.id}> утверждает, что выполнил задание:\n\n**${tasks[user.currentTaskIndex]}**`).setColor('#7289da');
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`approve_task_${interaction.user.id}`).setLabel('Да, принять').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`deny_task_${interaction.user.id}`).setLabel('Нет, отклонить').setStyle(ButtonStyle.Danger));
 
-    for (const curatorId of CURATORS) {
-        const curator = await client.users.fetch(curatorId).catch(() => null);
-        if (curator) await curator.send({ embeds: [embed], components: [row] }).catch(() => {});
+    // Уведомляем только ответственных за задания
+    for (const managerId of TASK_MANAGER_IDS) {
+        const manager = await client.users.fetch(managerId).catch(() => null);
+        if (manager) await manager.send({ embeds: [embed], components: [row] }).catch(() => {});
     }
 
     await interaction.update({ content: '✅ Задание отправлено на проверку кураторам!', embeds: [], components: [] });
@@ -408,8 +415,17 @@ async function denyTask(interaction: ButtonInteraction, userId: string, client: 
 async function renderTribuneView(interaction: ButtonInteraction) {
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('create_event').setLabel('Создать событие').setStyle(ButtonStyle.Success));
-        return interaction.reply({ content: 'Активных событий нет.', components: [row], ephemeral: true });
+        const rows = [];
+        if (isAdmin(interaction.user.id)) {
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('create_event')
+                    .setLabel('Создать событие')
+                    .setStyle(ButtonStyle.Success)
+            );
+            rows.push(row);
+        }
+        return interaction.reply({ content: 'Активных событий нет.', components: rows, ephemeral: true });
     }
     await updateTribuneMessage(interaction);
 }
@@ -439,9 +455,27 @@ async function updateTribuneMessage(interaction: any) {
 }
 
 function createTribuneButtons(tribune: any, userId: string) {
-    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('join_1_1').setLabel('1.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_1), new ButtonBuilder().setCustomId('join_1_2').setLabel('1.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_2), new ButtonBuilder().setCustomId('join_2_1').setLabel('2.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_1), new ButtonBuilder().setCustomId('join_2_2').setLabel('2.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_2));
+    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId('join_1_1').setLabel('1.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_1), 
+        new ButtonBuilder().setCustomId('join_1_2').setLabel('1.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot1_2), 
+        new ButtonBuilder().setCustomId('join_2_1').setLabel('2.1').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_1), 
+        new ButtonBuilder().setCustomId('join_2_2').setLabel('2.2').setStyle(ButtonStyle.Secondary).setDisabled(!!tribune.slot2_2)
+    );
     const userSlots = getUserSlots(tribune, userId);
-    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('complete_tribune').setLabel('Завершить трибуну').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('cancel_tribune').setLabel('Отменить трибуну').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('leave_tribune').setLabel('Выписаться').setStyle(ButtonStyle.Primary).setDisabled(userSlots.length === 0));
+    const row2 = new ActionRowBuilder<ButtonBuilder>();
+
+    // Кнопки управления только для Админов
+    if (isAdmin(userId)) {
+        row2.addComponents(
+            new ButtonBuilder().setCustomId('complete_tribune').setLabel('Завершить трибуну').setStyle(ButtonStyle.Success), 
+            new ButtonBuilder().setCustomId('cancel_tribune').setLabel('Отменить трибуну').setStyle(ButtonStyle.Secondary)
+        );
+    }
+
+    row2.addComponents(
+        new ButtonBuilder().setCustomId('leave_tribune').setLabel('Выписаться').setStyle(ButtonStyle.Primary).setDisabled(userSlots.length === 0)
+    );
+
     return [row1, row2];
 }
 
@@ -470,6 +504,9 @@ async function leaveSpecificSlot(interaction: any, slot: string) {
 }
 
 async function cancelTribune(interaction: ButtonInteraction) {
+    if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Только кураторы могут отменить трибуну.', ephemeral: true });
+    }
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
     await prisma.tribune.delete({ where: { id: activeTribune.id } });
@@ -478,6 +515,9 @@ async function cancelTribune(interaction: ButtonInteraction) {
 }
 
 async function completeTribune(interaction: ButtonInteraction) {
+    if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Только кураторы могут завершать трибуну.', ephemeral: true });
+    }
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
     const hostIds = [activeTribune.slot1_1, activeTribune.slot1_2, activeTribune.slot2_1, activeTribune.slot2_2].filter(id => id !== null) as string[];
@@ -514,7 +554,7 @@ async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
     });
 
     const rows = [];
-    if (!personal && isCurator(interaction.user.id)) {
+    if (!personal && isAdmin(interaction.user.id)) {
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId('clear_history')
@@ -528,7 +568,7 @@ async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
 }
 
 async function clearHistory(interaction: ButtonInteraction) {
-    if (!isCurator(interaction.user.id)) return;
+    if (!isAdmin(interaction.user.id)) return;
     
     await prisma.tribuneHistory.deleteMany({});
     await interaction.update({ content: '✅ История трибун успешно очищена!', embeds: [], components: [] });
@@ -536,11 +576,27 @@ async function clearHistory(interaction: ButtonInteraction) {
     setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
 
-async function showEventSelector(interaction: ButtonInteraction) { const select = new StringSelectMenuBuilder().setCustomId('select_event_type').setPlaceholder('Выберите тип').addOptions(new StringSelectMenuOptionBuilder().setLabel('Синяя кнопка').setValue('Синяя кнопка'), new StringSelectMenuOptionBuilder().setLabel('Быстрые свидания').setValue('Быстрые свидания'), new StringSelectMenuOptionBuilder().setLabel('Шоу талантов').setValue('Шоу талантов'), new StringSelectMenuOptionBuilder().setLabel('Любовь в вопросах').setValue('Любовь в вопросах'), new StringSelectMenuOptionBuilder().setLabel('Любовное колесо').setValue('Любовное колесо'), new StringSelectMenuOptionBuilder().setLabel('Давай поженимся').setValue('Давай поженимся')); await interaction.update({ content: 'Тип трибуны:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], files: [] }); }
+async function showEventSelector(interaction: ButtonInteraction) { 
+    if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: '❌ У вас нет прав для создания событий.', ephemeral: true });
+    }
+    const select = new StringSelectMenuBuilder()
+        .setCustomId('select_event_type')
+        .setPlaceholder('Выберите тип')
+        .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Синяя кнопка').setValue('Синяя кнопка'), 
+            new StringSelectMenuOptionBuilder().setLabel('Быстрые свидания').setValue('Быстрые свидания'), 
+            new StringSelectMenuOptionBuilder().setLabel('Шоу талантов').setValue('Шоу талантов'), 
+            new StringSelectMenuOptionBuilder().setLabel('Любовь в вопросах').setValue('Любовь в вопросах'), 
+            new StringSelectMenuOptionBuilder().setLabel('Любовное колесо').setValue('Любовное колесо'), 
+            new StringSelectMenuOptionBuilder().setLabel('Давай поженимся').setValue('Давай поженимся')
+        ); 
+    await interaction.update({ content: 'Тип трибуны:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], files: [] }); 
+}
 async function showDateModal(interaction: any, eventType: string) { const modal = new ModalBuilder().setCustomId(`modal_create_tribune:${eventType}`).setTitle('Параметры'); modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('date_input').setLabel("Дата/время").setStyle(TextInputStyle.Short).setRequired(true))); await interaction.showModal(modal); }
 async function createTribuneInDb(interaction: any, type: string, dateTime: string) { await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); await interaction.reply({ content: `✅ Создано!`, ephemeral: true }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
 async function viewHostsNorms(interaction: ButtonInteraction) {
-    if (!isCurator(interaction.user.id)) {
+    if (!isAdmin(interaction.user.id)) {
         return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
     }
 
@@ -591,5 +647,104 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
     } catch (e) {
         console.error('Ошибка при просмотре норм:', e);
         await interaction.editReply({ content: 'Произошла ошибка при формировании таблицы.' });
+    }
+}
+
+async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
+    if (!isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const guild = interaction.guild;
+        if (!guild) return;
+
+        const HOST_ROLE_ID = '1264275526865129613';
+        const members = await guild.members.fetch();
+        const hosts = members.filter(m => m.roles.cache.has(HOST_ROLE_ID));
+
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        // Получаем всех пользователей-ведущих из базы с их тиктоками
+        const hostIds = hosts.map(h => h.id);
+        const hostDataFromDb = await prisma.user.findMany({
+            where: { discordId: { in: hostIds } },
+            include: {
+                _count: {
+                    select: {
+                        tiktoks: {
+                            where: { 
+                                status: 'APPROVED',
+                                createdAt: { gte: oneWeekAgo } 
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const dataForCard = hosts.map(member => {
+            const dbUser = hostDataFromDb.find(u => u.discordId === member.id);
+            const hasNorma = (dbUser?._count?.tiktoks || 0) > 0;
+            return {
+                username: member.displayName,
+                hasNorma
+            };
+        });
+
+        dataForCard.sort((a, b) => a.username.localeCompare(b.username));
+
+        const buffer = await CanvasHelper.drawTikTokNormaCard(dataForCard);
+        const attachment = new AttachmentBuilder(buffer, { name: 'tiktoks_norma.png' });
+
+        await interaction.editReply({ files: [attachment] });
+    } catch (e) {
+        console.error('Ошибка при просмотре норм тиктоков:', e);
+        await interaction.editReply({ content: 'Произошла ошибка при формировании таблицы.' });
+    }
+}
+
+async function approveTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
+    const tiktok = await prisma.tiktok.findUnique({ where: { id: tiktokId } });
+    if (!tiktok) return interaction.update({ content: '❌ ТикТок не найден.', components: [] });
+
+    await prisma.tiktok.update({
+        where: { id: tiktokId },
+        data: { status: 'APPROVED' }
+    });
+
+    await interaction.update({ 
+        content: `✅ ТикТок пользователя <@${tiktok.userId}> одобрен!`, 
+        embeds: [], 
+        components: [] 
+    });
+
+    const targetUser = await client.users.fetch(tiktok.userId).catch(() => null);
+    if (targetUser) {
+        await targetUser.send(`🎬 **Ваше видео одобрено!**\n>>> Ваша норма за эту неделю выполнена. Спасибо!`).catch(() => {});
+    }
+}
+
+async function denyTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
+    const tiktok = await prisma.tiktok.findUnique({ where: { id: tiktokId } });
+    if (!tiktok) return interaction.update({ content: '❌ ТикТок не найден.', components: [] });
+
+    await prisma.tiktok.update({
+        where: { id: tiktokId },
+        data: { status: 'DENIED' }
+    });
+
+    await interaction.update({ 
+        content: `❌ ТикТок пользователя <@${tiktok.userId}> отклонен.`, 
+        embeds: [], 
+        components: [] 
+    });
+
+    const targetUser = await client.users.fetch(tiktok.userId).catch(() => null);
+    if (targetUser) {
+        await targetUser.send(`❌ **Ваше видео было отклонено куратором.**\n>>> Пожалуйста, проверьте правила публикации и попробуйте еще раз.`).catch(() => {});
     }
 }

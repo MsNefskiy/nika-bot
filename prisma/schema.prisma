@@ -27,6 +27,16 @@ model User {
   tribunesCreated  Tribune[]        @relation("TribuneCreator")
   tribuneHistory   TribuneHistory[] @relation("HostHistory")
   reprimands       Reprimand[]      @relation("UserReprimands")
+  tiktoks          TikTok[]         @relation("UserTikToks")
+}
+
+model TikTok {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserTikToks", fields: [userId], references: [discordId])
+  url       String
+  status    String   @default("PENDING") // PENDING, APPROVED, DENIED
+  createdAt DateTime @default(now())
 }
 
 model Reprimand {

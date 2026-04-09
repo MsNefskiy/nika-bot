@@ -9,7 +9,7 @@ import {
 import { MyClient } from '../types';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { prisma } from '../handlers/db';
-import { isCurator } from '../utils/config';
+import { isAdmin } from '../utils/config';
 
 export default {
     data: new SlashCommandBuilder()
@@ -20,7 +20,7 @@ export default {
     async execute(interaction: ChatInputCommandInteraction, client: MyClient) {
         // Всегда показываем профиль автора команды
         const targetUser = interaction.user;
-        const curatorStatus = isCurator(targetUser.id);
+        const curatorStatus = isAdmin(targetUser.id);
 
         // Получаем дату вступления на сервер
         const member = interaction.member as any; // GuildMember
@@ -107,7 +107,11 @@ export default {
                 new ButtonBuilder()
                     .setCustomId('admin_view_norms')
                     .setLabel('Норма ведущих')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('admin_view_tiktok_norms')
+                    .setLabel('Норма ТикТоков')
+                    .setStyle(ButtonStyle.Secondary)
             );
             rows.push(curatorRow);
         }

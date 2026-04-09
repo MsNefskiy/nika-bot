@@ -1,12 +1,25 @@
-export const CURATORS = [
-    '1271591410294063185',
-    '236508653434306560',
+export const ADMIN_IDS = [
     '331518705835966464',
-    '848876539000258572',
-    '1264275319112601660',
-    '1264275202192314489'
+    '1271591410294063185'
+];
+
+// Ответственные за ежедневные задания (получают DM)
+export const TASK_MANAGER_IDS = [
+    '331518705835966464',
+    '1271591410294063185'
+];
+
+// Ответственные за магазин (получают DM о покупках)
+export const SHOP_MANAGER_IDS = [
+    '1271591410294063185'
 ];
 
 export const REPRIMAND_ROLE_ID = '1264275526865129613';
 
-export const isCurator = (userId: string) => CURATORS.includes(userId);
+// Хелперы для проверки прав
+export const isAdmin = (userId: string) => ADMIN_IDS.includes(userId);
+export const isTaskManager = (userId: string) => TASK_MANAGER_IDS.includes(userId);
+export const isShopManager = (userId: string) => SHOP_MANAGER_IDS.includes(userId);
+
+// Для обратной совместимости (пока не везде обновили)
+export const isCurator = isAdmin;
