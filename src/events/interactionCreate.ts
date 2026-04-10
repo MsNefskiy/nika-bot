@@ -19,7 +19,17 @@ import { MyClient } from '../types';
 import { prisma } from '../handlers/db';
 import { CanvasHelper } from '../utils/canvasHelper';
 import { tasks } from '../utils/tasks';
-import { ADMIN_IDS, TASK_MANAGER_IDS, SHOP_MANAGER_IDS, isAdmin, isTaskManager, isShopManager, REPRIMAND_ROLE_ID } from '../utils/config';
+import { 
+    ADMIN_IDS, 
+    TASK_MANAGER_IDS, 
+    SHOP_MANAGER_IDS, 
+    isAdmin, 
+    isTaskManager, 
+    isShopManager, 
+    isStar,
+    isAdmin as isCurator, 
+    REPRIMAND_ROLE_ID 
+} from '../utils/config';
 import { shopItems } from '../utils/shop';
 import { getHosts } from '../utils/hostCache';
 
@@ -80,7 +90,46 @@ export default {
                     const [, type, targetId] = id.split(':');
                     await finalizeNormaRemove(interaction as ButtonInteraction, type, targetId);
                 }
+
+                // --- СОБЕСЕДОВАНИЯ ---
+                if (id === 'admin_interview_start') await startInterviewModal(interaction as ButtonInteraction);
+                if (id === 'admin_interview_history') await viewInterviewHistory(interaction as ButtonInteraction);
+                if (id.startsWith('int_q:')) {
+                    const [, targetId, qIdx, score, showAns] = id.split(':');
+                    await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), showAns === '1');
+                }
+                if (id.startsWith('int_tab:')) {
+                    const [, tab, targetId, qIdx, score] = id.split(':');
+                    if (tab === 'q') await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), false);
+                    if (tab === 't') await renderInterviewText(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score));
+                }
+                if (id.startsWith('int_rate:')) {
+                    const [, targetId, qIdx, score, rate] = id.split(':');
+                    const newScore = parseFloat(score) + parseFloat(rate);
+                    await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx) + 1, newScore, false);
+                }
+                if (id.startsWith('int_finish:')) {
+                    const [, status, targetId, score] = id.split(':');
+                    await finalizeInterview(interaction as ButtonInteraction, targetId, parseFloat(score), status as 'PASS' | 'FAIL');
+                }
+
+                // --- УДАЛЕНИЕ ИСТОРИИ ---
+                if (id.startsWith('history_delete_all:')) {
+                    const [, type, targetId] = id.split(':');
+                    await confirmDeleteAllHistory(interaction as ButtonInteraction, type, targetId);
+                }
+                if (id.startsWith('confirm_delete_all:')) {
+                    const [, type, targetId] = id.split(':');
+                    await executeDeleteAllHistory(interaction as ButtonInteraction, type, targetId);
+                }
+                if (id.startsWith('confirm_delete_single:')) {
+                    const [, type, targetId, entryId] = id.split(':');
+                    await executeDeleteSingleHistory(interaction as ButtonInteraction, type, targetId, entryId);
+                }
                 
+                if (id === 'view_history') await viewHistory(interaction as ButtonInteraction, true);
+                if (id === 'admin_view_history_global') await viewHistory(interaction as ButtonInteraction, false);
+
                 // --- ТИКТОКИ (ОДОБРЕНИЕ) ---
                 if (id.startsWith('approve_tiktok_')) await approveTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
                 if (id.startsWith('deny_tiktok_')) await denyTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
@@ -106,9 +155,9 @@ export default {
                     await finalizeReprimandRemove(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0], client);
                 }
 
-                if (interaction.customId.startsWith('reprimand_user_select:')) {
-                    const [, action] = interaction.customId.split(':');
-                    await handleReprimandUserSelection(interaction as StringSelectMenuInteraction, action, (interaction as StringSelectMenuInteraction).values[0]);
+                if (interaction.customId.startsWith('history_delete_single:')) {
+                    const [, type, targetId] = interaction.customId.split(':');
+                    await executeDeleteSingleHistory(interaction as StringSelectMenuInteraction, type, targetId, (interaction as StringSelectMenuInteraction).values[0]);
                 }
 
                 // Магазин: Выбор товара
@@ -127,6 +176,10 @@ export default {
                     const type = interaction.customId.split(':')[1];
                     const dateTime = interaction.fields.getTextInputValue('date_input');
                     await createTribuneInDb(interaction, type, dateTime);
+                }
+                if (interaction.customId.startsWith('modal_interview_target')) {
+                    const targetId = (interaction as ModalSubmitInteraction).fields.getTextInputValue('target_id');
+                    await startInterview(interaction as ModalSubmitInteraction, targetId);
                 }
                 if (interaction.customId.startsWith('modal_issue_reprimand:')) {
                     const targetId = interaction.customId.split(':')[1];
@@ -586,45 +639,7 @@ async function completeTribune(interaction: ButtonInteraction) {
     setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
 
-async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
-    const history = await prisma.tribuneHistory.findMany({ 
-        where: personal ? { hostId: interaction.user.id } : {}, 
-        take: 5, 
-        orderBy: { closedAt: 'desc' } 
-    });
-    
-    if (history.length === 0) return interaction.reply({ content: 'История пуста.', ephemeral: true });
-    
-    const embed = new EmbedBuilder()
-        .setTitle(personal ? '🌟 Твои трибуны' : '📜 История')
-        .setColor(personal ? '#ff00ff' : '#00ffff')
-        .setTimestamp();
-        
-    history.forEach((h: any) => {
-        const hosts = h.participants?.split(',').map((id: string) => id.trim()).filter((id: string) => id && id !== 'null').map((id: string) => `<@${id}>`).join(', ') || '*нет ведущих*';
-        embed.addFields({
-            name: `━━━━━━━━━━━━━━━`,
-            value: `**${h.type}** (${h.startTime})\n` +
-                   `👑 **Создатель:** <@${h.hostId.trim()}>\n` +
-                   `🎤 **Ведущие:** ${hosts}\n` +
-                   `📅 Завершена: <t:${Math.floor(h.closedAt.getTime() / 1000)}:R>`,
-            inline: false
-        });
-    });
 
-    const rows = [];
-    if (!personal && isAdmin(interaction.user.id)) {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-                .setCustomId('clear_history')
-                .setLabel('Очистить историю')
-                .setStyle(ButtonStyle.Danger)
-        );
-        rows.push(row);
-    }
-
-    await interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
-}
 
 async function clearHistory(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) return;
@@ -1179,4 +1194,241 @@ async function finalizeNormaRemove(interaction: ButtonInteraction, type: string,
         embeds: [], 
         components: [] 
     });
+}
+
+// --- СИСТЕМА СОБЕСЕДОВАНИЙ ---
+
+import { interviewQuestions } from '../utils/questions';
+
+async function startInterviewModal(interaction: ButtonInteraction) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', ephemeral: true });
+    
+    const modal = new ModalBuilder().setCustomId('modal_interview_target').setTitle('Начало собеседования');
+    const input = new TextInputBuilder().setCustomId('target_id').setLabel('Discord ID кандидата').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    await interaction.showModal(modal);
+}
+
+async function startInterview(interaction: ModalSubmitInteraction, targetId: string) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', ephemeral: true });
+    
+    const guild = interaction.guild;
+    if (!guild) return;
+    const member = await guild.members.fetch(targetId).catch(() => null);
+    if (!member) return interaction.reply({ content: '❌ Пользователь не найден на сервере.', ephemeral: true });
+    
+    // Проверка по роли (Ведущий)
+    if (!member.roles.cache.has(REPRIMAND_ROLE_ID)) {
+        return interaction.reply({ content: '❌ Указанный пользователь не является ведущим.', ephemeral: true });
+    }
+
+    await renderInterviewQuestion(interaction, targetId, 0, 0, false);
+}
+
+async function renderInterviewQuestion(interaction: any, targetId: string, qIdx: number, score: number, showAnswer: boolean) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ Отказано в доступе.', ephemeral: true });
+
+    if (qIdx >= interviewQuestions.length) {
+        return renderInterviewResult(interaction, targetId, score);
+    }
+
+    const question = interviewQuestions[qIdx];
+    const embed = new EmbedBuilder()
+        .setTitle(`📝 Собеседование: Вопрос ${qIdx + 1}/${interviewQuestions.length}`)
+        .setDescription(`**Кандидат:** <@${targetId}>\n\n**Вопрос:**\n${question.text}`)
+        .setColor('#5865F2')
+        .setFooter({ text: `Текущий балл: ${score}` });
+
+    if (showAnswer) {
+        embed.addFields({ name: '✅ Правильный ответ:', value: question.answer });
+    }
+
+    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:1`).setLabel('Да (+1)').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:0.5`).setLabel('50/50 (+0.5)').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:0`).setLabel('Нет (0)').setStyle(ButtonStyle.Danger)
+    );
+
+    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`int_q:${targetId}:${qIdx}:${score}:${showAnswer ? '0' : '1'}`).setLabel(showAnswer ? '🙈 Скрыть ответ' : '👁️ Показать ответ').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`int_tab:t:${targetId}:${qIdx}:${score}`).setLabel('📄 Текст проверки').setStyle(ButtonStyle.Secondary)
+    );
+
+    const method = interaction.replied || interaction.deferred ? 'editReply' : 'reply';
+    await (interaction as any)[method]({ embeds: [embed], components: [row1, row2], ephemeral: true, content: null });
+}
+
+async function renderInterviewText(interaction: ButtonInteraction, targetId: string, qIdx: number, score: number) {
+    const embed = new EmbedBuilder()
+        .setTitle('📄 Собеседование: Текст проверки')
+        .setDescription(`**Кандидат:** <@${targetId}>\n\n>>> *Здесь будет текст для проверки правил (пока в разработке).*`)
+        .setColor('#9B59B6')
+        .setFooter({ text: `Прогресс вопросов: ${qIdx}/${interviewQuestions.length}` });
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`int_tab:q:${targetId}:${qIdx}:${score}`).setLabel('📝 Вернуться к вопросам').setStyle(ButtonStyle.Success)
+    );
+
+    await interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function renderInterviewResult(interaction: any, targetId: string, score: number) {
+    const embed = new EmbedBuilder()
+        .setTitle('🏆 Собеседование завершено!')
+        .setDescription(`**Кандидат:** <@${targetId}>\n**Итоговый балл:** \`${score}\` / ${interviewQuestions.length}\n\nВыберите вердикт:`)
+        .setColor('#F1C40F');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`int_finish:PASS:${targetId}:${score}`).setLabel('✅ Прошел').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`int_finish:FAIL:${targetId}:${score}`).setLabel('❌ Не прошел').setStyle(ButtonStyle.Danger)
+    );
+
+    await interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function finalizeInterview(interaction: ButtonInteraction, targetId: string, score: number, status: 'PASS' | 'FAIL') {
+    await (prisma as any).interview.create({
+        data: {
+            targetId,
+            interviewerId: interaction.user.id,
+            score,
+            status
+        }
+    });
+
+    await interaction.update({
+        content: `✅ Собеседование сохранено!\n**Кандидат:** <@${targetId}>\n**Балл:** ${score}\n**Вердикт:** ${status === 'PASS' ? 'ПРОШЕЛ' : 'НЕ ПРОШЕЛ'}`,
+        embeds: [],
+        components: []
+    });
+}
+
+// --- УПРАВЛЕНИЕ ИСТОРИЕЙ ---
+
+async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: string) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории собеседований.', ephemeral: true });
+    
+    const idToSearch = targetId || interaction.user.id;
+    const history = await (prisma as any).interview.findMany({
+        where: { targetId: idToSearch },
+        take: 10,
+        orderBy: { createdAt: 'desc' }
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle(`📝 История собеседований: <@${idToSearch}>`)
+        .setColor('#5865F2');
+
+    if (history.length === 0) {
+        embed.setDescription('*Записей не найдено.*');
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    const description = history.map((h: any, i: number) => 
+        `**${i + 1}.** <t:${Math.floor(h.createdAt.getTime() / 1000)}:d> — Баллы: \`${h.score}\` (${h.status === 'PASS' ? '✅' : '❌'})`
+    ).join('\n');
+
+    embed.setDescription(description);
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`history_delete_all:interview:${idToSearch}`).setLabel('🗑️ Удалить всё').setStyle(ButtonStyle.Danger)
+    );
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(`history_delete_single:interview:${idToSearch}`)
+        .setPlaceholder('Удалить конкретную запись...')
+        .addOptions(history.map((h: any, i: number) => ({
+            label: `Запись #${i + 1} (${h.status})`,
+            value: h.id,
+            description: h.createdAt.toLocaleDateString()
+        })));
+
+    const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
+    
+    if (interaction.replied || interaction.deferred) {
+        await interaction.editReply({ embeds: [embed], components });
+    } else {
+        await interaction.reply({ embeds: [embed], components, ephemeral: true });
+    }
+}
+
+async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
+    const embed = new EmbedBuilder()
+        .setTitle('⚠️ Подтверждение удаления')
+        .setDescription(`Вы уверены, что хотите удалить **всю** историю (${type === 'interview' ? 'собеседований' : 'трибун'}) для <@${targetId}>?`)
+        .setColor('#FF0000');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`confirm_delete_all:${type}:${targetId}`).setLabel('Да, удалить всё').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(type === 'interview' ? 'admin_interview_history' : 'view_history').setLabel('Отмена').setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function executeDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
+    if (type === 'interview') {
+        await (prisma as any).interview.deleteMany({ where: { targetId } });
+    } else {
+        await (prisma as any).tribuneHistory.deleteMany({ where: { hostId: targetId } });
+    }
+
+    await interaction.update({ content: `✅ Вся история ${type === 'interview' ? 'собеседований' : 'трибун'} очищена.`, embeds: [], components: [] });
+}
+
+async function executeDeleteSingleHistory(interaction: any, type: string, targetId: string, entryId: string) {
+    if (type === 'interview') {
+        await (prisma as any).interview.delete({ where: { id: entryId } });
+        await viewInterviewHistory(interaction, targetId);
+    } else {
+        await (prisma as any).tribuneHistory.delete({ where: { id: entryId } });
+        await viewHistory(interaction, true);
+    }
+}
+
+// Обновление старой функции истории для поддержки удаления
+async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
+    const targetUserId = interaction.user.id;
+    const history = await prisma.tribuneHistory.findMany({ 
+        where: personal ? { hostId: targetUserId } : {}, 
+        take: 10, 
+        orderBy: { closedAt: 'desc' } 
+    });
+    
+    const embed = new EmbedBuilder()
+        .setTitle(personal ? '🌟 Твои трибуны' : '📜 История трибун')
+        .setColor(personal ? '#ff00ff' : '#00ffff');
+
+    if (history.length === 0) {
+        embed.setDescription('*История трибун пуста.*');
+        const msg = { embeds: [embed], components: [], ephemeral: true };
+        return (interaction.replied || interaction.deferred) ? interaction.editReply(msg) : interaction.reply(msg);
+    }
+
+    const description = history.map((h, i) => 
+        `**${i + 1}.** ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`
+    ).join('\n');
+
+    embed.setDescription(description);
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`history_delete_all:tribune:${targetUserId}`).setLabel('🗑️ Удалить всё').setStyle(ButtonStyle.Danger)
+    );
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(`history_delete_single:tribune:${targetUserId}`)
+        .setPlaceholder('Удалить конкретную запись...')
+        .addOptions(history.map((h, i) => ({
+            label: `Трибуна #${i + 1}`,
+            value: h.id,
+            description: h.type
+        })));
+
+    const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
+    
+    if (interaction.replied || interaction.deferred) {
+        await interaction.editReply({ embeds: [embed], components });
+    } else {
+        await interaction.reply({ embeds: [embed], components, ephemeral: true });
+    }
 }

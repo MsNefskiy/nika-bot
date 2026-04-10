@@ -59,55 +59,71 @@ export default {
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 
         // --- КНОПКИ ---
-        const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        const rows = [];
+
+        // Ряд 1: Личные действия
+        const personalRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId('view_tasks')
-                .setLabel('Задания')
+                .setLabel('📝 Задания')
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('view_shop')
-                .setLabel('Магазин')
+                .setLabel('🛒 Магазин')
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
-                .setCustomId('view_tribune')
-                .setLabel('Трибуны')
-                .setStyle(ButtonStyle.Primary)
-        );
-
-        const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-                .setCustomId('view_my_reprimands')
-                .setLabel('Выговоры')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
                 .setCustomId('view_history')
-                .setLabel('История')
+                .setLabel('📜 История')
                 .setStyle(ButtonStyle.Secondary)
         );
+        rows.push(personalRow);
 
-        const rows = [row1, row2];
+        // Ряд 2: Основные системы
+        const coreRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId('view_tribune')
+                .setLabel('🎤 Трибуны')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('view_my_reprimands')
+                .setLabel('⚖️ Выговоры')
+                .setStyle(ButtonStyle.Danger)
+        );
+        rows.push(coreRow);
 
-        // Третий ряд: Админ-панель для кураторов
+        // Ряд 3: Админ-панель (Кураторы)
         if (curatorStatus) {
-            const curatorRow1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const curatorRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('admin_norma_manage')
-                    .setLabel('🔧 Управление нормой')
+                    .setLabel('🔧 Нормы')
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('admin_reprimand_manage')
-                    .setLabel('🔧 Управление выговорами')
-                    .setStyle(ButtonStyle.Danger)
-            );
-
-            const curatorRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    .setLabel('⚖️ Выговоры')
+                    .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('admin_view_host_list')
-                    .setLabel('📋 Список ведущих')
+                    .setLabel('📋 Состав')
                     .setStyle(ButtonStyle.Success)
             );
+            rows.push(curatorRow);
+        }
 
-            rows.push(curatorRow1, curatorRow2);
+        // Ряд 4: Звездочка (Собеседования)
+        const isUserStar = require('../utils/config').isStar(targetUser.id);
+        if (isUserStar) {
+            const starRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('admin_interview_start')
+                    .setLabel('📝 Собеседование')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('admin_interview_history')
+                    .setLabel('📊 История соб-ий')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+            rows.push(starRow);
         }
 
         await interaction.reply({ files: [attachment], components: rows, ephemeral: true });

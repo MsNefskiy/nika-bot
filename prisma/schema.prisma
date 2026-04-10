@@ -33,6 +33,17 @@ model User {
   tribuneHistory   TribuneHistory[] @relation("HostHistory")
   reprimands       Reprimand[]      @relation("UserReprimands")
   tiktoks          TikTok[]         @relation("UserTikToks")
+  interviews       Interview[]      @relation("UserInterviews")
+}
+
+model Interview {
+  id             String   @id @default(uuid())
+  targetId       String
+  target         User     @relation("UserInterviews", fields: [targetId], references: [discordId])
+  interviewerId  String
+  score          Float    // Балл (например, 12.5)
+  status         String   // PASS, FAIL
+  createdAt      DateTime @default(now())
 }
 
 model TikTok {
