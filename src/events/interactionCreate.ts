@@ -1254,12 +1254,12 @@ async function renderInterviewQuestion(interaction: any, targetId: string, qIdx:
         new ButtonBuilder().setCustomId(`int_tab:t:${targetId}:${qIdx}:${score}`).setLabel('📄 Текст проверки').setStyle(ButtonStyle.Secondary)
     );
 
-    const isComponent = interaction.isButton() || interaction.isStringSelectMenu();
+    const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components: [row1, row2], ephemeral: true, content: null });
 }
 
-async function renderInterviewText(interaction: ButtonInteraction, targetId: string, qIdx: number, score: number) {
+async function renderInterviewText(interaction: any, targetId: string, qIdx: number, score: number) {
     const embed = new EmbedBuilder()
         .setTitle('📄 Собеседование: Текст проверки')
         .setDescription(`**Кандидат:** <@${targetId}>\n\n>>> Добро пожаловать на трибуну "Давай поженимся"! Здесь мы создаем возможности для знакомства и нахождения своей второй половинки. Готовьтесь ответить на три вопроса и найти свою искреннюю половинку! Вперед, к новым знакомствам и возможно к будущему счастью! На трибуне "Давай поженимся" нету скипов, как это работает в случае с Быстрыми свиданиями и Синей кнопкой, все желающие остаются на трибуне до того момента, пока первый участник не выберет кого-то из них, желаем вам удачи и мы начинаем!`)
@@ -1270,7 +1270,7 @@ async function renderInterviewText(interaction: ButtonInteraction, targetId: str
         new ButtonBuilder().setCustomId(`int_tab:q:${targetId}:${qIdx}:${score}`).setLabel('📝 Вернуться к вопросам').setStyle(ButtonStyle.Success)
     );
 
-    const isComponent = interaction.isButton() || interaction.isStringSelectMenu();
+    const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components: [row] });
 }
@@ -1286,7 +1286,7 @@ async function renderInterviewResult(interaction: any, targetId: string, score: 
         new ButtonBuilder().setCustomId(`int_finish:FAIL:${targetId}:${score}`).setLabel('❌ Не прошел').setStyle(ButtonStyle.Danger)
     );
 
-    const isComponent = interaction.isButton() || interaction.isStringSelectMenu();
+    const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components: [row] });
 }
