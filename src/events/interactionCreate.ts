@@ -32,6 +32,8 @@ import {
 } from '../utils/config';
 import { shopItems } from '../utils/shop';
 import { getHosts } from '../utils/hostCache';
+import { reInterviewQuestions, reInterviewSituations } from '../utils/reInterviewData';
+import { interviewQuestions } from '../utils/questions';
 
 export default {
     name: 'interactionCreate',
@@ -110,6 +112,35 @@ export default {
                     return await finalizeInterview(interaction as ButtonInteraction, targetId, parseFloat(score), status as 'PASS' | 'FAIL');
                 }
 
+                // --- ПЕРЕСОБЕСЕДОВАНИЯ ---
+                if (id === 'admin_reinterview_start') return await startReInterviewSelection(interaction as ButtonInteraction);
+                if (id === 'admin_reinterview_history') return await viewReInterviewHistory(interaction as ButtonInteraction);
+                if (id.startsWith('reint_q:')) {
+                    const [, targetId, qIdx, score, sIdx, showAns] = id.split(':');
+                    return await renderReInterview(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), parseInt(sIdx), 'q', showAns === '1');
+                }
+                if (id.startsWith('reint_s:')) {
+                    const [, targetId, qIdx, score, sIdx] = id.split(':');
+                    return await renderReInterview(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), parseInt(sIdx), 's', false);
+                }
+                if (id.startsWith('reint_tab:')) {
+                    const [, tab, targetId, qIdx, score, sIdx] = id.split(':');
+                    return await renderReInterview(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), parseInt(sIdx), tab as 'q' | 's', false);
+                }
+                if (id.startsWith('reint_rate:')) {
+                    const [, targetId, qIdx, score, sIdx, rate] = id.split(':');
+                    const newScore = parseFloat(score) + parseFloat(rate);
+                    return await renderReInterview(interaction as ButtonInteraction, targetId, parseInt(qIdx) + 1, newScore, parseInt(sIdx), 'q', false);
+                }
+                if (id.startsWith('reint_next_s:')) {
+                    const [, targetId, qIdx, score, sIdx] = id.split(':');
+                    return await renderReInterview(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), parseInt(sIdx) + 1, 's', false);
+                }
+                if (id.startsWith('reint_finish:')) {
+                    const [, status, targetId, score, sIdx] = id.split(':');
+                    return await finalizeReInterview(interaction as ButtonInteraction, targetId, parseFloat(score), parseInt(sIdx), status as 'PASS' | 'FAIL');
+                }
+
                 // --- УДАЛЕНИЕ ИСТОРИИ ---
                 if (id.startsWith('history_delete_all:')) {
                     const [, type, targetId] = id.split(':');
@@ -140,6 +171,10 @@ export default {
                 if (interaction.customId.startsWith('norma_user_select:')) {
                     const [, action, type] = interaction.customId.split(':');
                     await handleNormaUserSelection(interaction as StringSelectMenuInteraction, action, type, (interaction as StringSelectMenuInteraction).values[0]);
+                }
+
+                if (interaction.customId === 'reinterview_user_select') {
+                    await startReInterviewDetails(interaction as StringSelectMenuInteraction, interaction.values[0]);
                 }
 
                 if (interaction.customId === 'select_event_type') {
@@ -1467,4 +1502,175 @@ async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
     const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
+}
+
+// --- СИСТЕМА ПЕРЕСОБЕСЕДОВАНИЙ ---
+
+async function startReInterviewSelection(interaction: ButtonInteraction) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения пересобеседований.', ephemeral: true });
+    
+    const guild = interaction.guild;
+    if (!guild) return;
+    const hosts = await getHosts(guild);
+    
+    if (hosts.size === 0) {
+        return interaction.reply({ content: '❌ Ведущие не найдены.', ephemeral: true });
+    }
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId('reinterview_user_select')
+        .setPlaceholder('Выберите ведущего для пересобеседования...')
+        .addOptions(
+            Array.from(hosts.values()).slice(0, 25).map(m => 
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(m.displayName.substring(0, 100))
+                    .setValue(m.id)
+                    .setDescription(m.user.username.substring(0, 100))
+            )
+        );
+
+    await interaction.reply({ 
+        content: '🎙️ **Пересобеседование ведущего**\nВыберите пользователя из официального списка ведущих:', 
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+        ephemeral: true 
+    });
+}
+
+async function startReInterviewDetails(interaction: StringSelectMenuInteraction, targetId: string) {
+    await renderReInterview(interaction, targetId, 0, 0, 0, 'q', false);
+}
+
+async function renderReInterview(interaction: any, targetId: string, qIdx: number, score: number, sIdx: number, tab: 'q' | 's', showAnswer: boolean) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ Отказано в доступе.', ephemeral: true });
+
+    const isQuestionsDone = qIdx >= reInterviewQuestions.length;
+    const isSituationsDone = sIdx >= reInterviewSituations.length;
+
+    const embed = new EmbedBuilder().setTimestamp();
+    const components: ActionRowBuilder<ButtonBuilder>[] = [];
+
+    // Табы (сохраняем прогресс)
+    const tabRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`reint_tab:q:${targetId}:${qIdx}:${score}:${sIdx}`)
+            .setLabel('📝 Вопросы')
+            .setStyle(tab === 'q' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId(`reint_tab:s:${targetId}:${qIdx}:${score}:${sIdx}`)
+            .setLabel('🎭 Ситуации')
+            .setStyle(tab === 's' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+    components.push(tabRow);
+
+    if (tab === 'q') {
+        if (isQuestionsDone) {
+            embed.setTitle('✅ Вопросы завершены!')
+                .setDescription(`**Кандидат:** <@${targetId}>\n**Итоговый балл за вопросы:** \`${score}\` / ${reInterviewQuestions.length}\n\nВы можете перейти в раздел "Ситуации" или вынести вердикт, если ситуации тоже обсуждены.`)
+                .setColor('#00FF7F')
+                .setFooter({ text: `Обсуждено ситуаций: ${sIdx}/${reInterviewSituations.length}` });
+        } else {
+            const question = reInterviewQuestions[qIdx];
+            embed.setTitle(`📝 Пересобеседование: Вопрос ${qIdx + 1}/${reInterviewQuestions.length}`)
+                .setDescription(`**Кандидат:** <@${targetId}>\n\n**Вопрос:**\n${question.text}`)
+                .setColor('#5865F2')
+                .setFooter({ text: `Текущий балл: ${score} | Обсуждено ситуаций: ${sIdx}/${reInterviewSituations.length}` });
+
+            if (showAnswer) {
+                embed.addFields({ name: '✅ Правильный ответ:', value: question.answer });
+            }
+
+            const rateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`reint_rate:${targetId}:${qIdx}:${score}:${sIdx}:1`).setLabel('✅ Верно').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`reint_rate:${targetId}:${qIdx}:${score}:${sIdx}:0.5`).setLabel('⚠️ 50/50').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`reint_rate:${targetId}:${qIdx}:${score}:${sIdx}:0`).setLabel('❌ Неверно').setStyle(ButtonStyle.Danger)
+            );
+            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`reint_q:${targetId}:${qIdx}:${score}:${sIdx}:${showAnswer ? '0' : '1'}`).setLabel(showAnswer ? '🙈 Скрыть ответ' : '👁️ Показать ответ').setStyle(ButtonStyle.Secondary)
+            );
+            components.push(rateRow, actionRow);
+        }
+    } else {
+        if (isSituationsDone) {
+            embed.setTitle('✅ Ситуации обсуждены!')
+                .setDescription(`**Кандидат:** <@${targetId}>\n**Все ситуации (${reInterviewSituations.length}/${reInterviewSituations.length}) пройдены.**\n\nВы можете вернуться к вопросам или вынести вердикт.`)
+                .setColor('#FFD700')
+                .setFooter({ text: `Балл за вопросы: ${score}/${reInterviewQuestions.length}` });
+        } else {
+            const situation = reInterviewSituations[sIdx];
+            embed.setTitle(`🎭 Пересобеседование: Ситуация ${sIdx + 1}/${reInterviewSituations.length}`)
+                .setDescription(`**Кандидат:** <@${targetId}>\n\n**Ситуация:**\n${situation.text}`)
+                .setColor('#9B59B6')
+                .addFields({ name: '💡 Решение:', value: situation.answer })
+                .setFooter({ text: `Вопросы: ${qIdx}/${reInterviewQuestions.length} | Балл: ${score}` });
+
+            const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId(`reint_next_s:${targetId}:${qIdx}:${score}:${sIdx}`).setLabel('➡️ Следующая ситуация').setStyle(ButtonStyle.Primary)
+            );
+            components.push(navRow);
+        }
+    }
+
+    // Если всё пройдено или хотя бы вопросы закончены, даем возможность завершить
+    if (isQuestionsDone) {
+        const finishRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId(`reint_finish:PASS:${targetId}:${score}:${sIdx}`).setLabel('🏆 ПРОШЕЛ').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`reint_finish:FAIL:${targetId}:${score}:${sIdx}`).setLabel('❌ НЕ ПРОШЕЛ').setStyle(ButtonStyle.Danger)
+        );
+        components.push(finishRow);
+    }
+
+    const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
+    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+    await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true, content: null });
+}
+
+async function finalizeReInterview(interaction: ButtonInteraction, targetId: string, score: number, sIdx: number, status: 'PASS' | 'FAIL') {
+    await (prisma as any).reInterview.create({
+        data: {
+            targetId,
+            interviewerId: interaction.user.id,
+            score,
+            status
+        }
+    });
+
+    await interaction.update({
+        content: `✅ Пересобеседование сохранено!\n**Кандидат:** <@${targetId}>\n**Балл:** ${score}\n**Вердикт:** ${status === 'PASS' ? 'ПРОШЕЛ' : 'НЕ ПРОШЕЛ'}\n*(Статистика по ситуациям была учтена в процессе)*`,
+        embeds: [],
+        components: []
+    });
+}
+
+async function viewReInterviewHistory(interaction: ButtonInteraction) {
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории пересобеседований.', ephemeral: true });
+    
+    // Defer reply for history
+    await interaction.deferReply({ ephemeral: true });
+
+    const history = await (prisma as any).reInterview.findMany({
+        take: 15,
+        orderBy: { createdAt: 'desc' },
+        include: { target: true }
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle('📊 История пересобеседований')
+        .setColor('#FFD700')
+        .setTimestamp();
+
+    if (history.length === 0) {
+        embed.setDescription('*Записей не найдено.*');
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    const description = history.map((h: any, i: number) => {
+        const date = `<t:${Math.floor(h.createdAt.getTime() / 1000)}:d>`;
+        const candidate = h.target?.username || `<@${h.targetId}>`;
+        const resultText = h.status === 'PASS' ? '✅ Прошел' : '❌ Не прошел';
+        return `**${i + 1}.** ${date} — **${candidate}**\n**Итог:** \`${h.score}\` баллов | ${resultText}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
+    }).join('\n');
+
+    embed.setDescription(description);
+
+    await interaction.editReply({ embeds: [embed] });
 }

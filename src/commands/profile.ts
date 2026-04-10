@@ -120,8 +120,16 @@ export default {
                     .setLabel('📝 Собеседование')
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
+                    .setCustomId('admin_reinterview_start')
+                    .setLabel('🎙️ Пересобеседование')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
                     .setCustomId('admin_interview_history')
-                    .setLabel('📊 История собеседований')
+                    .setLabel('📊 История соб.')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('admin_reinterview_history')
+                    .setLabel('🎓 История пересоб.')
                     .setStyle(ButtonStyle.Secondary)
             );
             rows.push(starRow);
