@@ -1254,14 +1254,15 @@ async function renderInterviewQuestion(interaction: any, targetId: string, qIdx:
         new ButtonBuilder().setCustomId(`int_tab:t:${targetId}:${qIdx}:${score}`).setLabel('📄 Текст проверки').setStyle(ButtonStyle.Secondary)
     );
 
-    const method = interaction.replied || interaction.deferred ? 'editReply' : 'reply';
+    const isComponent = interaction.isButton() || interaction.isStringSelectMenu();
+    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components: [row1, row2], ephemeral: true, content: null });
 }
 
 async function renderInterviewText(interaction: ButtonInteraction, targetId: string, qIdx: number, score: number) {
     const embed = new EmbedBuilder()
         .setTitle('📄 Собеседование: Текст проверки')
-        .setDescription(`**Кандидат:** <@${targetId}>\n\n>>> *Здесь будет текст для проверки правил (пока в разработке).*`)
+        .setDescription(`**Кандидат:** <@${targetId}>\n\n>>> Добро пожаловать на трибуну "Давай поженимся"! Здесь мы создаем возможности для знакомства и нахождения своей второй половинки. Готовьтесь ответить на три вопроса и найти свою искреннюю половинку! Вперед, к новым знакомствам и возможно к будущему счастью! На трибуне "Давай поженимся" нету скипов, как это работает в случае с Быстрыми свиданиями и Синей кнопкой, все желающие остаются на трибуне до того момента, пока первый участник не выберет кого-то из них, желаем вам удачи и мы начинаем!`)
         .setColor('#9B59B6')
         .setFooter({ text: `Прогресс вопросов: ${qIdx}/${interviewQuestions.length}` });
 
@@ -1269,7 +1270,9 @@ async function renderInterviewText(interaction: ButtonInteraction, targetId: str
         new ButtonBuilder().setCustomId(`int_tab:q:${targetId}:${qIdx}:${score}`).setLabel('📝 Вернуться к вопросам').setStyle(ButtonStyle.Success)
     );
 
-    await interaction.update({ embeds: [embed], components: [row] });
+    const isComponent = interaction.isButton() || interaction.isStringSelectMenu();
+    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+    await (interaction as any)[method]({ embeds: [embed], components: [row] });
 }
 
 async function renderInterviewResult(interaction: any, targetId: string, score: number) {
@@ -1283,7 +1286,9 @@ async function renderInterviewResult(interaction: any, targetId: string, score: 
         new ButtonBuilder().setCustomId(`int_finish:FAIL:${targetId}:${score}`).setLabel('❌ Не прошел').setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.update({ embeds: [embed], components: [row] });
+    const isComponent = interaction.isButton() || interaction.isStringSelectMenu();
+    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+    await (interaction as any)[method]({ embeds: [embed], components: [row] });
 }
 
 async function finalizeInterview(interaction: ButtonInteraction, targetId: string, score: number, status: 'PASS' | 'FAIL') {
@@ -1345,11 +1350,10 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
 
     const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
     
-    if (interaction.replied || interaction.deferred) {
-        await interaction.editReply({ embeds: [embed], components });
-    } else {
-        await interaction.reply({ embeds: [embed], components, ephemeral: true });
-    }
+    const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
+    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+    await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
+}
 }
 
 async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
@@ -1402,7 +1406,9 @@ async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
     if (history.length === 0) {
         embed.setDescription('*История трибун пуста.*');
         const msg = { embeds: [embed], components: [], ephemeral: true };
-        return (interaction.replied || interaction.deferred) ? interaction.editReply(msg) : interaction.reply(msg);
+        const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
+        const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+        return (interaction as any)[method](msg);
     }
 
     const description = history.map((h, i) => 
@@ -1426,9 +1432,7 @@ async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
 
     const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
     
-    if (interaction.replied || interaction.deferred) {
-        await interaction.editReply({ embeds: [embed], components });
-    } else {
-        await interaction.reply({ embeds: [embed], components, ephemeral: true });
-    }
+    const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
+    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+    await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
 }
