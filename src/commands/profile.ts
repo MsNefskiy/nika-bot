@@ -54,7 +54,8 @@ export default {
             avatarUrl,
             hasNorma, 
             dbUser.stars, 
-            dbUser.joinedAt
+            dbUser.joinedAt,
+            dbUser.normaLastUpdated
         );
         const attachment = new AttachmentBuilder(buffer, { name: 'profile.png' });
 

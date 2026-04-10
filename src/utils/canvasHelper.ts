@@ -71,7 +71,7 @@ export class CanvasHelper {
         ctx.shadowBlur = 0;
     }
 
-    static async drawProfileCard(username: string, avatarUrl: string, hasNorma: boolean, stars: number, joinedAt: Date) {
+    static async drawProfileCard(username: string, avatarUrl: string, hasNorma: boolean, stars: number, joinedAt: Date, normaDate: Date | null = null) {
         const width = 700;
         const height = 300;
         const canvas = createCanvas(width, height);
@@ -144,7 +144,14 @@ export class CanvasHelper {
         ctx.textAlign = 'right';
         
         const normEmoji = hasNorma ? '✅' : '❌';
-        ctx.fillText(`Норма: ${normEmoji}`, width - 50, height - 45);
+        ctx.fillText(`Норма: ${normEmoji}`, width - 50, height - 55);
+
+        if (hasNorma && normaDate) {
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            const nDateStr = normaDate.toLocaleDateString('ru-RU');
+            ctx.fillText(`подтверждена ${nDateStr}`, width - 50, height - 30);
+        }
 
         return canvas.toBuffer();
     }

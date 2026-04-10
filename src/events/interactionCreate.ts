@@ -904,13 +904,20 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
                 : '*Нет активных выговоров*';
 
             const userTribunes = tribuneHistory.filter(h => h.hostId === id || h.participants?.includes(id));
-            const manualTribunePass = await prisma.user.findUnique({ where: { discordId: id } }).then(u => u?.normaLastUpdated);
+            const dbUser = await prisma.user.findUnique({ where: { discordId: id } });
+            const manualTribunePass = dbUser?.normaLastUpdated;
             const isManualTribunePass = manualTribunePass ? (new Date().getTime() - manualTribunePass.getTime() < 14 * 24 * 60 * 60 * 1000) : false;
 
-            const tribuneCount = userTribunes.length;
-            const tribuneDetails = userTribunes.length > 0
+            let tribuneCount = userTribunes.length;
+            let manualEntry = '';
+            if (isManualTribunePass && manualTribunePass) {
+                tribuneCount += 1;
+                manualEntry = `• Ручное подтверждение (<t:${Math.floor(manualTribunePass.getTime() / 1000)}:d>)\n`;
+            }
+
+            const tribuneDetails = (manualEntry + (userTribunes.length > 0
                 ? userTribunes.map(h => `• ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`).slice(0, 5).join('\n') + (userTribunes.length > 5 ? '\n*...и еще другие*' : '')
-                : (isManualTribunePass ? '*Норма выдана вручную куратором*' : '*Нет проведенных трибун за 14 дней*');
+                : (isManualTribunePass ? '' : '*Нет проведенных трибун за 14 дней*'))) || '*Нет данных за 14 дней*';
 
             const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n**🎤 Трибуны (за 2 нед): ${tribuneCount}**\n${tribuneDetails}\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
 
