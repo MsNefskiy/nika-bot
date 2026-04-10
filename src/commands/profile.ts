@@ -108,15 +108,7 @@ export default {
                 new ButtonBuilder()
                     .setCustomId('admin_view_host_list')
                     .setLabel('📋 Список ведущих')
-                    .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId('admin_view_norms')
-                    .setLabel('Норма ведущих')
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId('admin_view_tiktok_norms')
-                    .setLabel('Норма ТикТоков')
-                    .setStyle(ButtonStyle.Secondary)
+                    .setStyle(ButtonStyle.Success)
             );
 
             rows.push(curatorRow1, curatorRow2);

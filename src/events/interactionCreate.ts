@@ -21,6 +21,7 @@ import { CanvasHelper } from '../utils/canvasHelper';
 import { tasks } from '../utils/tasks';
 import { ADMIN_IDS, TASK_MANAGER_IDS, SHOP_MANAGER_IDS, isAdmin, isTaskManager, isShopManager, REPRIMAND_ROLE_ID } from '../utils/config';
 import { shopItems } from '../utils/shop';
+import { getHosts } from '../utils/hostCache';
 
 export default {
     name: 'interactionCreate',
@@ -646,8 +647,7 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
         const guild = interaction.guild;
         if (!guild) return;
 
-        const members = await guild.members.fetch();
-        const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
+        const hosts = await getHosts(guild);
 
         const hostIds = hosts.map(h => h.id);
         const hostDataFromDb = await prisma.user.findMany({
@@ -702,8 +702,7 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
         const guild = interaction.guild;
         if (!guild) return;
 
-        const members = await guild.members.fetch();
-        const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
+        const hosts = await getHosts(guild);
 
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -819,8 +818,7 @@ async function viewDetailedHostList(interaction: ButtonInteraction) {
         if (!guild) return;
 
         // 1. Получаем участников с ролью ведущего
-        const members = await guild.members.fetch();
-        const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
+        const hosts = await getHosts(guild);
 
         if (hosts.size === 0) {
             return interaction.editReply({ content: 'Ведущие с указанной ролью не найдены.' });
@@ -959,8 +957,7 @@ async function chooseNormaUser(interaction: ButtonInteraction, action: string, t
     const guild = interaction.guild;
     if (!guild) return;
 
-    const members = await guild.members.fetch();
-    const hosts = members.filter(m => m.roles.cache.has(REPRIMAND_ROLE_ID));
+    const hosts = await getHosts(guild);
 
     if (hosts.size === 0) {
         return interaction.update({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
@@ -995,9 +992,10 @@ async function handleNormaUserSelection(interaction: StringSelectMenuInteraction
             ? { hasNorma: false, normaLastUpdated: null } 
             : { tiktokNormaLastUpdated: null };
 
-        await prisma.user.update({
+        await prisma.user.upsert({
             where: { discordId: targetId },
-            data: updateData as any
+            update: updateData as any,
+            create: { discordId: targetId, username: 'Ведущий', ...updateData } as any
         });
 
         return interaction.update({ 
