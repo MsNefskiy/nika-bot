@@ -71,7 +71,7 @@ export default {
             new ButtonBuilder()
                 .setCustomId('view_tribune')
                 .setLabel('Трибуны')
-                .setStyle(ButtonStyle.Secondary)
+                .setStyle(ButtonStyle.Primary)
         );
 
         const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(

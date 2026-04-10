@@ -829,7 +829,14 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
         return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
     }
 
-    if (!interaction.deferred && !interaction.replied) {
+    // Проверяем: это переключение страницы (ID содержит номер) или новый вызов из профиля
+    const isPageSwitch = interaction.customId.includes(':');
+
+    if (isPageSwitch) {
+        // Если это кнопка пагинации — обновляем текущее сообщение
+        await interaction.deferUpdate().catch(() => {});
+    } else {
+        // Если это первый вызов из профиля — создаем новое ephemeral сообщение
         await interaction.deferReply({ ephemeral: true });
     }
 
@@ -837,12 +844,12 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
         const guild = interaction.guild;
         if (!guild) return;
 
-        // 1. Получаем участников с ролью ведущего
+        // 1. Получаем участников с ролью ведущего (из кеша)
         const hostsCollection = await getHosts(guild);
         const hosts = Array.from(hostsCollection.values());
 
         if (hosts.length === 0) {
-            return interaction.editReply({ content: 'Ведущие с указанной ролью не найдены.' });
+            return interaction.editReply({ content: 'Ведущие с указанной ролью не найдены.', embeds: [], components: [] });
         }
 
         // 2. Получаем данные из БД
@@ -851,21 +858,17 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
 
         const hostIds = hosts.map(h => h.id);
         
-        // Все выговоры для этих пользователей
         const allReprimands = await (prisma as any).reprimand.findMany({
             where: { userId: { in: hostIds } },
             orderBy: { createdAt: 'desc' }
         });
 
-        // История трибун за 14 дней
         const tribuneHistory = await prisma.tribuneHistory.findMany({
-            where: {
-                closedAt: { gte: twoWeeksAgo }
-            },
+            where: { closedAt: { gte: twoWeeksAgo } },
             orderBy: { closedAt: 'desc' }
         });
 
-        // 3. Пагинация (по 5 человек на страницу для лучшей читаемости)
+        // 3. Пагинация (по 5 человек на страницу)
         const itemsPerPage = 5;
         const totalPages = Math.ceil(hosts.length / itemsPerPage);
         const start = page * itemsPerPage;
@@ -879,16 +882,12 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
 
         for (const member of pageHosts) {
             const id = member.id;
-            // Выговоры
             const userReprimands = allReprimands.filter((r: any) => r.userId === id);
             const reprimandText = userReprimands.length > 0 
                 ? userReprimands.map((r: any) => `• <t:${Math.floor(r.createdAt.getTime() / 1000)}:d> — ${r.reason}`).join('\n')
                 : '*Нет активных выговоров*';
 
-            // Трибуны
-            const userTribunes = tribuneHistory.filter(h => 
-                h.hostId === id || h.participants?.includes(id)
-            );
+            const userTribunes = tribuneHistory.filter(h => h.hostId === id || h.participants?.includes(id));
             const manualTribunePass = await prisma.user.findUnique({ where: { discordId: id } }).then(u => u?.normaLastUpdated);
             const isManualTribunePass = manualTribunePass ? (new Date().getTime() - manualTribunePass.getTime() < 14 * 24 * 60 * 60 * 1000) : false;
 
@@ -897,7 +896,6 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
                 ? userTribunes.map(h => `• ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`).slice(0, 5).join('\n') + (userTribunes.length > 5 ? '\n*...и еще другие*' : '')
                 : (isManualTribunePass ? '*Норма выдана вручную куратором*' : '*Нет проведенных трибун за 14 дней*');
 
-            // Улучшенное форматирование: убрал лишний перенос перед "Трибуны", добавил четкий разделитель
             const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n**🎤 Трибуны (за 2 нед): ${tribuneCount}**\n${tribuneDetails}\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
 
             embed.addFields({
@@ -907,9 +905,7 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
             });
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>();
-        
-        row.addComponents(
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
                 .setCustomId(`admin_view_host_list:${page - 1}`)
                 .setLabel('⬅️ Назад')
@@ -922,17 +918,15 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
                 .setDisabled(page >= totalPages - 1)
         );
 
-        const method = (interaction.deferred || interaction.replied) ? 'editReply' : 'reply';
-        await (interaction as any)[method]({ 
+        // Используем editReply, так как мы всегда либо deferReply, либо deferUpdate
+        await interaction.editReply({ 
             embeds: [embed], 
-            components: [row],
-            ephemeral: true 
+            components: [row]
         });
 
     } catch (e) {
         console.error('Ошибка при формировании списка ведущих:', e);
-        const method = (interaction.deferred || interaction.replied) ? 'editReply' : 'reply';
-        await (interaction as any)[method]({ content: '❌ Произошла ошибка при сборе данных.', ephemeral: true });
+        await interaction.editReply({ content: '❌ Произошла ошибка при сборе данных.', embeds: [], components: [] });
     }
 }
 
