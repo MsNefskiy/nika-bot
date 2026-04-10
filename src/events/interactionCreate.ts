@@ -1244,9 +1244,9 @@ async function renderInterviewQuestion(interaction: any, targetId: string, qIdx:
     }
 
     const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:1`).setLabel('Да (+1)').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:0.5`).setLabel('50/50 (+0.5)').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:0`).setLabel('Нет (0)').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:1`).setLabel('✅ Правильный ответ').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:0.5`).setLabel('⚠️ 50/50 (+0.5)').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`int_rate:${targetId}:${qIdx}:${score}:0`).setLabel('❌ Неправильный ответ').setStyle(ButtonStyle.Danger)
     );
 
     const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
