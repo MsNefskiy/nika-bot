@@ -1239,9 +1239,8 @@ async function finalizeNormaRemove(interaction: ButtonInteraction, type: string,
     });
 }
 
-// --- СИСТЕМА СОБЕСЕДОВАНИЙ ---
 
-import { interviewQuestions } from '../utils/questions';
+// --- СИСТЕМА СОБЕСЕДОВАНИЙ ---
 
 async function startInterviewModal(interaction: ButtonInteraction) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', ephemeral: true });
