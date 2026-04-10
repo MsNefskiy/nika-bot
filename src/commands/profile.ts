@@ -111,10 +111,10 @@ export default {
             rows.push(curatorRow);
         }
 
-        // Ряд 4: Звездочка (Собеседования)
+        // Ряд 4-5: Звездочка (Собеседования)
         const isUserStar = require('../utils/config').isStar(targetUser.id);
         if (isUserStar) {
-            const starRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const starRow1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('admin_interview_start')
                     .setLabel('📝 Собеседование')
@@ -122,17 +122,21 @@ export default {
                 new ButtonBuilder()
                     .setCustomId('admin_reinterview_start')
                     .setLabel('🎙️ Пересобеседование')
-                    .setStyle(ButtonStyle.Primary),
+                    .setStyle(ButtonStyle.Primary)
+            );
+            
+            const starRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('admin_interview_history')
-                    .setLabel('📊 История соб.')
+                    .setLabel('📊 История собеседований')
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('admin_reinterview_history')
-                    .setLabel('🎓 История пересоб.')
+                    .setLabel('🎓 История пересобеседований')
                     .setStyle(ButtonStyle.Secondary)
             );
-            rows.push(starRow);
+            
+            rows.push(starRow1, starRow2);
         }
 
         await interaction.reply({ files: [attachment], components: rows, ephemeral: true });

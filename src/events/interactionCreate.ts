@@ -155,9 +155,9 @@ export default {
                 }
                 
                 // --- ИСТОРИЯ (ОБЩЕЕ) ---
-                if (id === 'view_history') return await viewHistory(interaction as ButtonInteraction, true);
-                if (id === 'view_personal_history') return await viewHistory(interaction as ButtonInteraction, true);
-                if (id === 'admin_view_history_global') return await viewHistory(interaction as ButtonInteraction, false);
+                if (id === 'view_history') return await viewHistory(interaction as ButtonInteraction);
+                if (id === 'view_personal_history') return await viewHistory(interaction as ButtonInteraction);
+                if (id === 'admin_view_history_global') return await viewHistory(interaction as ButtonInteraction);
                 if (id === 'clear_history') return await clearHistory(interaction as ButtonInteraction);
 
                 // --- ТИКТОКИ (ОДОБРЕНИЕ) ---
@@ -1415,17 +1415,25 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
 }
 
 async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
-    const isGlobal = targetId === 'GLOBAL';
+    const isGlobal = targetId === 'GLOBAL' || targetId === 'ALL';
+    let typeText = 'трибун';
+    if (type === 'interview') typeText = 'собеседований';
+    if (type === 'reinterview') typeText = 'пересобеседований';
+    
     const targetText = isGlobal ? '**ВСЮ**' : `все записи для <@${targetId}>`;
     
     const embed = new EmbedBuilder()
         .setTitle('⚠️ Подтверждение удаления')
-        .setDescription(`Вы уверены, что хотите удалить ${targetText} историю (${type === 'interview' ? 'собеседований' : 'трибун'})?`)
+        .setDescription(`Вы уверены, что хотите удалить ${targetText} историю ${typeText}?`)
         .setColor('#FF0000');
+
+    let cancelId = 'view_history';
+    if (type === 'interview') cancelId = 'admin_interview_history';
+    if (type === 'reinterview') cancelId = 'admin_reinterview_history';
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`confirm_delete_all:${type}:${targetId}`).setLabel('Да, удалить всё').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(type === 'interview' ? 'admin_interview_history' : 'view_history').setLabel('Отмена').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(cancelId).setLabel('Отмена').setStyle(ButtonStyle.Secondary)
     );
 
     await interaction.update({ embeds: [embed], components: [row] });
@@ -1438,8 +1446,12 @@ async function executeDeleteAllHistory(interaction: ButtonInteraction, type: str
         } else {
             await (prisma as any).interview.deleteMany({ where: { targetId } });
         }
-    } else {
-        await (prisma as any).tribuneHistory.deleteMany({ where: { hostId: targetId } });
+    } else if (type === 'reinterview') {
+        await (prisma as any).reInterview.deleteMany({});
+        return interaction.update({ content: '✅ Вся история пересобеседований успешно очищена.', embeds: [], components: [] });
+    } else if (type === 'tribune') {
+        await (prisma as any).tribuneHistory.deleteMany({});
+        return interaction.update({ content: '✅ Вся история трибун успешно очищена.', embeds: [], components: [] });
     }
 
     await interaction.update({ content: `✅ История ${type === 'interview' ? 'собеседований' : 'трибун'} успешно очищена.`, embeds: [], components: [] });
@@ -1449,55 +1461,60 @@ async function executeDeleteSingleHistory(interaction: any, type: string, target
     if (type === 'interview') {
         await (prisma as any).interview.delete({ where: { id: entryId } });
         await viewInterviewHistory(interaction, targetId === 'GLOBAL' ? undefined : targetId);
-    } else {
+    } else if (type === 'reinterview') {
+        await (prisma as any).reInterview.delete({ where: { id: entryId } });
+        await viewReInterviewHistory(interaction);
+    } else if (type === 'tribune') {
         await (prisma as any).tribuneHistory.delete({ where: { id: entryId } });
-        await viewHistory(interaction, true);
+        await viewHistory(interaction);
     }
 }
 
-// Обновление старой функции истории для поддержки удаления
-async function viewHistory(interaction: ButtonInteraction, personal: boolean) {
-    const targetUserId = interaction.user.id;
+// Глобальная история трибун
+async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInteraction) {
     const history = await prisma.tribuneHistory.findMany({ 
-        where: personal ? { hostId: targetUserId } : {}, 
-        take: 10, 
-        orderBy: { closedAt: 'desc' } 
+        take: 15, 
+        orderBy: { closedAt: 'desc' },
+        include: { host: true }
     });
     
     const embed = new EmbedBuilder()
-        .setTitle(personal ? '🌟 Твои трибуны' : '📜 История трибун')
-        .setColor(personal ? '#ff00ff' : '#00ffff');
+        .setTitle('📜 История трибун')
+        .setColor('#00ffff')
+        .setTimestamp();
 
     if (history.length === 0) {
         embed.setDescription('*История трибун пуста.*');
-        const msg = { embeds: [embed], components: [], ephemeral: true };
-        const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
+        const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
         const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-        return (interaction as any)[method](msg);
+        return (interaction as any)[method]({ embeds: [embed], components: [], ephemeral: true });
     }
 
-    const description = history.map((h, i) => 
-        `**${i + 1}.** ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`
-    ).join('\n');
+    const description = history.map((h, i) => {
+        const date = `<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>`;
+        const hostName = h.host?.username || 'Неизвестен';
+        const hostLink = `[${hostName}](https://discord.com/users/${h.hostId})`;
+        return `**${i + 1}.** ${date} — ${hostLink}\n**Тип:** ${h.type}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
+    }).join('\n');
 
     embed.setDescription(description);
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`history_delete_all:tribune:${targetUserId}`).setLabel('🗑️ Удалить всё').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('history_delete_all:tribune:ALL').setLabel('🗑️ Очистить всю историю').setStyle(ButtonStyle.Danger)
     );
 
     const select = new StringSelectMenuBuilder()
-        .setCustomId(`history_delete_single:tribune:${targetUserId}`)
+        .setCustomId('history_delete_single:tribune:ALL')
         .setPlaceholder('Удалить конкретную запись...')
         .addOptions(history.map((h, i) => ({
-            label: `Трибуна #${i + 1}`,
+            label: `Запись #${i + 1} (${h.type.substring(0, 50)})`,
             value: h.id,
-            description: h.type
+            description: `Ведущий: ${h.host?.username || h.hostId}`
         })));
 
     const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
     
-    const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
+    const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
 }
@@ -1670,5 +1687,21 @@ async function viewReInterviewHistory(interaction: ButtonInteraction) {
 
     embed.setDescription(description);
 
-    await interaction.editReply({ embeds: [embed] });
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId('history_delete_all:reinterview:ALL')
+            .setLabel('🗑️ Очистить всю историю')
+            .setStyle(ButtonStyle.Danger)
+    );
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId('history_delete_single:reinterview:ALL')
+        .setPlaceholder('Удалить конкретную запись...')
+        .addOptions(history.map((h: any, i: number) => ({
+            label: `Запись #${i + 1} (${h.status === 'PASS' ? '✅' : '❌'})`,
+            value: h.id,
+            description: `Кандидат: ${h.target?.username || h.targetId}`
+        })));
+
+    await interaction.editReply({ embeds: [embed], components: [row, new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] });
 }
