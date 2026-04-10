@@ -13,7 +13,6 @@ import {
     ButtonInteraction,
     StringSelectMenuInteraction,
     ModalSubmitInteraction,
-    UserSelectMenuInteraction
 } from 'discord.js';
 import { MyClient } from '../types';
 import { prisma } from '../handlers/db';
