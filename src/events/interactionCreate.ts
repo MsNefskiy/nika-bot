@@ -1220,15 +1220,24 @@ async function startInterviewModal(interaction: ButtonInteraction) {
 async function startInterview(interaction: ModalSubmitInteraction, targetId: string) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', ephemeral: true });
     
-    const guild = interaction.guild;
-    if (!guild) return;
-    const member = await guild.members.fetch(targetId).catch(() => null);
-    if (!member) return interaction.reply({ content: '❌ Пользователь не найден на сервере.', ephemeral: true });
+    // Пытаемся найти пользователя на сервере или глобально через API
+    let username = targetId;
+    const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
     
-    // Проверка по роли (Ведущий)
-    if (!member.roles.cache.has(REPRIMAND_ROLE_ID)) {
-        return interaction.reply({ content: '❌ Указанный пользователь не является ведущим.', ephemeral: true });
+    if (member) {
+        username = member.user.username;
+    } else {
+        const user = await interaction.client.users.fetch(targetId).catch(() => null);
+        if (!user) return interaction.reply({ content: '❌ Пользователь с таким ID не найден в Discord (проверьте правильность ввода).', ephemeral: true });
+        username = user.username;
     }
+
+    // Гарантируем наличие пользователя в базе данных (для связей в Interview)
+    await prisma.user.upsert({
+        where: { discordId: targetId },
+        update: { username },
+        create: { discordId: targetId, username }
+    });
 
     await renderInterviewQuestion(interaction, targetId, 0, 0, false);
 }
