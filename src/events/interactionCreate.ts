@@ -47,93 +47,94 @@ export default {
                 const id = interaction.customId;
 
                 // --- ПРОФИЛЬ И ТРИБУНЫ ---
-                if (id === 'view_tribune') await renderTribuneView(interaction);
-                if (id === 'create_event') await showEventSelector(interaction);
+                if (id === 'view_tribune') return await renderTribuneView(interaction);
+                if (id === 'create_event') return await showEventSelector(interaction);
                 if (id.startsWith('join_')) {
                     const parts = id.split('_');
                     const slot = `slot${parts[1]}_${parts[2]}`;
-                    await joinSlot(interaction, slot);
+                    return await joinSlot(interaction, slot);
                 }
-                if (id === 'leave_tribune') await handleLeaveRequest(interaction);
-                if (id === 'complete_tribune') await completeTribune(interaction);
-                if (id === 'cancel_tribune') await cancelTribune(interaction);
-                if (id === 'view_history') await viewHistory(interaction, false);
-                if (id === 'view_personal_history') await viewHistory(interaction, true);
-                if (id === 'clear_history') await clearHistory(interaction);
+                if (id === 'leave_tribune') return await handleLeaveRequest(interaction);
+                if (id === 'complete_tribune') return await completeTribune(interaction);
+                if (id === 'cancel_tribune') return await cancelTribune(interaction);
                 
                 // --- ЗАДАНИЯ ---
-                if (id === 'view_tasks') await handleTasksView(interaction);
-                if (id === 'submit_task') await submitTaskToCurators(interaction, client);
-                if (id.startsWith('approve_task_')) await approveTask(interaction, id.split('_')[2], client);
-                if (id.startsWith('deny_task_')) await denyTask(interaction, id.split('_')[2], client);
+                if (id === 'view_tasks') return await handleTasksView(interaction);
+                if (id === 'submit_task') return await submitTaskToCurators(interaction, client);
+                if (id.startsWith('approve_task_')) return await approveTask(interaction, id.split('_')[2], client);
+                if (id.startsWith('deny_task_')) return await denyTask(interaction, id.split('_')[2], client);
 
                 // --- ВЫГОВОРЫ ---
-                if (id === 'view_my_reprimands') await viewMyReprimands(interaction);
-                if (id === 'admin_issue_reprimand') await initiateReprimandIssue(interaction);
-                if (id === 'admin_remove_reprimand') await initiateReprimandRemove(interaction);
+                if (id === 'view_my_reprimands') return await viewMyReprimands(interaction);
+                if (id === 'admin_issue_reprimand') return await initiateReprimandIssue(interaction);
+                if (id === 'admin_remove_reprimand') return await initiateReprimandRemove(interaction);
 
                 // --- МАГАЗИН ---
-                if (id === 'view_shop') await handleShopView(interaction);
-                if (id.startsWith('confirm_buy:')) await processPurchase(interaction, id.split(':')[1], client);
+                if (id === 'view_shop') return await handleShopView(interaction);
+                if (id.startsWith('confirm_buy:')) return await processPurchase(interaction, id.split(':')[1], client);
 
                 // --- УПРАВЛЕНИЕ НОРМОЙ (АДМИН) ---
                 if (id.startsWith('admin_view_host_list')) {
                     const page = parseInt(id.split(':')[1]) || 0;
-                    await viewDetailedHostList(interaction as ButtonInteraction, page);
+                    return await viewDetailedHostList(interaction as ButtonInteraction, page);
                 }
-                if (id === 'admin_norma_manage') await startNormaManage(interaction as ButtonInteraction);
-                if (id === 'admin_reprimand_manage') await startReprimandManage(interaction as ButtonInteraction);
-                if (id.startsWith('norma_action:')) await chooseNormaType(interaction as ButtonInteraction, id.split(':')[1]);
-                if (id.startsWith('norma_type:')) await chooseNormaUser(interaction as ButtonInteraction, id.split(':')[1], id.split(':')[2]);
-                if (id.startsWith('reprimand_action:')) await chooseReprimandUser(interaction as ButtonInteraction, id.split(':')[1]);
+                if (id === 'admin_norma_manage') return await startNormaManage(interaction as ButtonInteraction);
+                if (id === 'admin_reprimand_manage') return await startReprimandManage(interaction as ButtonInteraction);
+                if (id.startsWith('norma_action:')) return await chooseNormaType(interaction as ButtonInteraction, id.split(':')[1]);
+                if (id.startsWith('norma_type:')) return await chooseNormaUser(interaction as ButtonInteraction, id.split(':')[1], id.split(':')[2]);
+                if (id.startsWith('reprimand_action:')) return await chooseReprimandUser(interaction as ButtonInteraction, id.split(':')[1]);
                 if (id.startsWith('confirm_norma_remove:')) {
                     const [, type, targetId] = id.split(':');
-                    await finalizeNormaRemove(interaction as ButtonInteraction, type, targetId);
+                    return await finalizeNormaRemove(interaction as ButtonInteraction, type, targetId);
                 }
 
                 // --- СОБЕСЕДОВАНИЯ ---
-                if (id === 'admin_interview_start') await startInterviewModal(interaction as ButtonInteraction);
-                if (id === 'admin_interview_history') await viewInterviewHistory(interaction as ButtonInteraction);
+                if (id === 'admin_interview_start') return await startInterviewModal(interaction as ButtonInteraction);
+                if (id === 'admin_interview_history') return await viewInterviewHistory(interaction as ButtonInteraction);
                 if (id.startsWith('int_q:')) {
                     const [, targetId, qIdx, score, showAns] = id.split(':');
-                    await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), showAns === '1');
+                    return await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), showAns === '1');
                 }
                 if (id.startsWith('int_tab:')) {
                     const [, tab, targetId, qIdx, score] = id.split(':');
-                    if (tab === 'q') await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), false);
-                    if (tab === 't') await renderInterviewText(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score));
+                    if (tab === 'q') return await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score), false);
+                    if (tab === 't') return await renderInterviewText(interaction as ButtonInteraction, targetId, parseInt(qIdx), parseFloat(score));
                 }
                 if (id.startsWith('int_rate:')) {
                     const [, targetId, qIdx, score, rate] = id.split(':');
                     const newScore = parseFloat(score) + parseFloat(rate);
-                    await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx) + 1, newScore, false);
+                    return await renderInterviewQuestion(interaction as ButtonInteraction, targetId, parseInt(qIdx) + 1, newScore, false);
                 }
                 if (id.startsWith('int_finish:')) {
                     const [, status, targetId, score] = id.split(':');
-                    await finalizeInterview(interaction as ButtonInteraction, targetId, parseFloat(score), status as 'PASS' | 'FAIL');
+                    return await finalizeInterview(interaction as ButtonInteraction, targetId, parseFloat(score), status as 'PASS' | 'FAIL');
                 }
 
                 // --- УДАЛЕНИЕ ИСТОРИИ ---
                 if (id.startsWith('history_delete_all:')) {
                     const [, type, targetId] = id.split(':');
-                    await confirmDeleteAllHistory(interaction as ButtonInteraction, type, targetId);
+                    return await confirmDeleteAllHistory(interaction as ButtonInteraction, type, targetId);
                 }
                 if (id.startsWith('confirm_delete_all:')) {
                     const [, type, targetId] = id.split(':');
-                    await executeDeleteAllHistory(interaction as ButtonInteraction, type, targetId);
+                    return await executeDeleteAllHistory(interaction as ButtonInteraction, type, targetId);
                 }
                 if (id.startsWith('confirm_delete_single:')) {
                     const [, type, targetId, entryId] = id.split(':');
-                    await executeDeleteSingleHistory(interaction as ButtonInteraction, type, targetId, entryId);
+                    return await executeDeleteSingleHistory(interaction as ButtonInteraction, type, targetId, entryId);
                 }
                 
-                if (id === 'view_history') await viewHistory(interaction as ButtonInteraction, true);
-                if (id === 'admin_view_history_global') await viewHistory(interaction as ButtonInteraction, false);
+                // --- ИСТОРИЯ (ОБЩЕЕ) ---
+                if (id === 'view_history') return await viewHistory(interaction as ButtonInteraction, true);
+                if (id === 'view_personal_history') return await viewHistory(interaction as ButtonInteraction, true);
+                if (id === 'admin_view_history_global') return await viewHistory(interaction as ButtonInteraction, false);
+                if (id === 'clear_history') return await clearHistory(interaction as ButtonInteraction);
 
                 // --- ТИКТОКИ (ОДОБРЕНИЕ) ---
-                if (id.startsWith('approve_tiktok_')) await approveTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
-                if (id.startsWith('deny_tiktok_')) await denyTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
+                if (id.startsWith('approve_tiktok_')) return await approveTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
+                if (id.startsWith('deny_tiktok_')) return await denyTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
             }
+
 
             if (interaction.isStringSelectMenu()) {
                 if (interaction.customId.startsWith('norma_user_select:')) {
@@ -1313,42 +1314,51 @@ async function finalizeInterview(interaction: ButtonInteraction, targetId: strin
 async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: string) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории собеседований.', ephemeral: true });
     
-    const idToSearch = targetId || interaction.user.id;
     const history = await (prisma as any).interview.findMany({
-        where: { targetId: idToSearch },
-        take: 10,
-        orderBy: { createdAt: 'desc' }
+        where: targetId ? { targetId } : {},
+        take: 20,
+        orderBy: { createdAt: 'desc' },
+        include: { target: true }
     });
 
     const embed = new EmbedBuilder()
-        .setTitle(`📝 История собеседований: <@${idToSearch}>`)
-        .setColor('#5865F2');
+        .setTitle(targetId ? `📝 История кандидата: <@${targetId}>` : '📊 Глобальная история собеседований')
+        .setColor('#5865F2')
+        .setTimestamp();
 
     if (history.length === 0) {
         embed.setDescription('*Записей не найдено.*');
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        const isComp = interaction.isButton?.() || interaction.isStringSelectMenu?.();
+        const meth = isComp ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
+        return (interaction as any)[meth]({ embeds: [embed], components: [], ephemeral: true });
     }
 
-    const description = history.map((h: any, i: number) => 
-        `**${i + 1}.** <t:${Math.floor(h.createdAt.getTime() / 1000)}:d> — Баллы: \`${h.score}\` (${h.status === 'PASS' ? '✅' : '❌'})`
-    ).join('\n');
+    const description = history.map((h: any, i: number) => {
+        const date = `<t:${Math.floor(h.createdAt.getTime() / 1000)}:d>`;
+        const candidate = h.target?.username || `<@${h.targetId}>`;
+        const resultText = h.status === 'PASS' ? '✅ Прошел' : '❌ Не прошел';
+        return `**${i + 1}.** ${date} — **${candidate}**\n**Итог:** \`${h.score}\` баллов | ${resultText}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
+    }).join('\n');
 
     embed.setDescription(description);
 
+    const idForActions = targetId || 'GLOBAL';
+    const components: any[] = [];
+    
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`history_delete_all:interview:${idToSearch}`).setLabel('🗑️ Удалить всё').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`history_delete_all:interview:${idForActions}`).setLabel('🗑️ Удалить всё').setStyle(ButtonStyle.Danger)
     );
 
     const select = new StringSelectMenuBuilder()
-        .setCustomId(`history_delete_single:interview:${idToSearch}`)
+        .setCustomId(`history_delete_single:interview:${idForActions}`)
         .setPlaceholder('Удалить конкретную запись...')
         .addOptions(history.map((h: any, i: number) => ({
-            label: `Запись #${i + 1} (${h.status})`,
+            label: `Запись #${i + 1} (${h.target?.username || h.targetId})`,
             value: h.id,
-            description: h.createdAt.toLocaleDateString()
+            description: `${h.status === 'PASS' ? 'Пройдено' : 'Провалено'} - ${h.createdAt.toLocaleDateString()}`
         })));
 
-    const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
+    components.push(row, new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select));
     
     const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
@@ -1356,9 +1366,12 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
 }
 
 async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
+    const isGlobal = targetId === 'GLOBAL';
+    const targetText = isGlobal ? '**ВСЮ**' : `все записи для <@${targetId}>`;
+    
     const embed = new EmbedBuilder()
         .setTitle('⚠️ Подтверждение удаления')
-        .setDescription(`Вы уверены, что хотите удалить **всю** историю (${type === 'interview' ? 'собеседований' : 'трибун'}) для <@${targetId}>?`)
+        .setDescription(`Вы уверены, что хотите удалить ${targetText} историю (${type === 'interview' ? 'собеседований' : 'трибун'})?`)
         .setColor('#FF0000');
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -1371,18 +1384,22 @@ async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: str
 
 async function executeDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
     if (type === 'interview') {
-        await (prisma as any).interview.deleteMany({ where: { targetId } });
+        if (targetId === 'GLOBAL') {
+            await (prisma as any).interview.deleteMany({});
+        } else {
+            await (prisma as any).interview.deleteMany({ where: { targetId } });
+        }
     } else {
         await (prisma as any).tribuneHistory.deleteMany({ where: { hostId: targetId } });
     }
 
-    await interaction.update({ content: `✅ Вся история ${type === 'interview' ? 'собеседований' : 'трибун'} очищена.`, embeds: [], components: [] });
+    await interaction.update({ content: `✅ История ${type === 'interview' ? 'собеседований' : 'трибун'} успешно очищена.`, embeds: [], components: [] });
 }
 
 async function executeDeleteSingleHistory(interaction: any, type: string, targetId: string, entryId: string) {
     if (type === 'interview') {
         await (prisma as any).interview.delete({ where: { id: entryId } });
-        await viewInterviewHistory(interaction, targetId);
+        await viewInterviewHistory(interaction, targetId === 'GLOBAL' ? undefined : targetId);
     } else {
         await (prisma as any).tribuneHistory.delete({ where: { id: entryId } });
         await viewHistory(interaction, true);
