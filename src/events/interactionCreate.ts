@@ -890,7 +890,7 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
         const pageHosts = hosts.slice(start, start + itemsPerPage);
 
         const embed = new EmbedBuilder()
-            .setTitle('📋 Детальный список состава')
+            .setTitle('📋 Список ведущих')
             .setDescription(`Страница **${page + 1}** из **${totalPages}**`)
             .setColor('#a76eff')
             .setTimestamp();

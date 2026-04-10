@@ -86,7 +86,7 @@ export default {
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('view_my_reprimands')
-                .setLabel('⚖️ Выговоры')
+                .setLabel('🛡️ Мои выговоры')
                 .setStyle(ButtonStyle.Danger)
         );
         rows.push(coreRow);
@@ -96,15 +96,15 @@ export default {
             const curatorRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('admin_norma_manage')
-                    .setLabel('🔧 Нормы')
+                    .setLabel('🔧 Управление нормами')
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('admin_reprimand_manage')
-                    .setLabel('⚖️ Выговоры')
+                    .setLabel('⚖️ Управление выговорами')
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('admin_view_host_list')
-                    .setLabel('📋 Состав')
+                    .setLabel('📋 Список ведущих')
                     .setStyle(ButtonStyle.Success)
             );
             rows.push(curatorRow);
@@ -120,7 +120,7 @@ export default {
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('admin_interview_history')
-                    .setLabel('📊 История соб-ий')
+                    .setLabel('📊 История собеседований')
                     .setStyle(ButtonStyle.Secondary)
             );
             rows.push(starRow);
