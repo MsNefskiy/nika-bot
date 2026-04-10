@@ -13,6 +13,7 @@ import {
     ButtonInteraction,
     StringSelectMenuInteraction,
     ModalSubmitInteraction,
+    MessageFlags,
 } from 'discord.js';
 import { MyClient } from '../types';
 import { prisma } from '../handlers/db';
@@ -234,7 +235,7 @@ export default {
         } catch (error) {
             console.error('Interaction Error:', error);
             if (interaction.isRepliable()) {
-                const msg = { content: '⚠️ Ошибка при обработке!', ephemeral: true };
+                const msg = { content: '⚠️ Ошибка при обработке!', flags: 64 /* MessageFlags.Ephemeral */ };
                 if (interaction.replied || interaction.deferred) {
                     await interaction.followUp(msg).catch(() => {});
                 } else {
@@ -249,7 +250,7 @@ export default {
 
 async function handleShopView(interaction: any) {
     if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     const buffer = await CanvasHelper.drawShopCard(shopItems);
@@ -364,7 +365,7 @@ async function saveReprimand(interaction: ModalSubmitInteraction, targetId: stri
     // Проверка, есть ли пользователь на сервере
     const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
     if (!member) {
-        return interaction.reply({ content: '❌ Пользователь не найден на этом сервере!', ephemeral: true });
+        return interaction.reply({ content: '❌ Пользователь не найден на этом сервере!', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     const username = member.user.username;
@@ -381,7 +382,7 @@ async function saveReprimand(interaction: ModalSubmitInteraction, targetId: stri
         data: { userId: targetId, reason, authorId: interaction.user.id }
     });
 
-    await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, ephemeral: true });
+    await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, flags: 64 /* MessageFlags.Ephemeral */ });
 
     // Попытка отправить сообщение в личку (не блокирует выполнение из-за catch)
     try {
@@ -412,8 +413,8 @@ async function showReprimandsToRemove(interaction: ModalSubmitInteraction | Stri
     const reprimands = await (prisma as any).reprimand.findMany({ where: { userId: targetId }, take: 25 });
     
     if (reprimands.length === 0) {
-        const msg = { content: '❌ У этого пользователя нет активных выговоров в базе.', components: [], ephemeral: true };
-        if (interaction.isModalSubmit()) return interaction.reply(msg);
+        const msg = { content: '❌ У этого пользователя нет активных выговоров в базе.', components: [] };
+        if (interaction.isModalSubmit()) return interaction.reply({ ...msg, flags: 64 /* MessageFlags.Ephemeral */ });
         else return interaction.update(msg);
     }
 
@@ -424,11 +425,10 @@ async function showReprimandsToRemove(interaction: ModalSubmitInteraction | Stri
 
     const replyData = { 
         content: `Список выговоров <@${targetId}>:`, 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
-        ephemeral: true
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)]
     };
 
-    if (interaction.isModalSubmit()) await interaction.reply(replyData);
+    if (interaction.isModalSubmit()) await interaction.reply({ ...replyData, flags: 64 /* MessageFlags.Ephemeral */ });
     else await interaction.update(replyData);
 }
 
@@ -461,7 +461,7 @@ async function viewMyReprimands(interaction: ButtonInteraction) {
         });
     });
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], flags: 64 /* MessageFlags.Ephemeral */ });
 }
 
 // --- СИСТЕМА ЗАДАНИЙ ---
@@ -491,7 +491,7 @@ async function handleTasksView(interaction: ButtonInteraction) {
         .setDescription(`${statusText}\n\n>>> **${taskIndex! + 1}. ${taskText}**`)
         .setColor(isTaskDone ? '#00ff00' : (isTaskPending ? '#ffff00' : '#00ffff'));
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('submit_task').setLabel('Выполнено').setStyle(ButtonStyle.Success).setDisabled(isTaskDone || isTaskPending));
-    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    await interaction.reply({ embeds: [embed], components: [row], flags: 64 /* MessageFlags.Ephemeral */ });
 }
 
 async function submitTaskToCurators(interaction: ButtonInteraction, client: MyClient) {
@@ -546,7 +546,7 @@ async function renderTribuneView(interaction: ButtonInteraction) {
             );
             rows.push(row);
         }
-        return interaction.reply({ content: 'Активных событий нет.', components: rows, ephemeral: true });
+        return interaction.reply({ content: 'Активных событий нет.', components: rows, flags: 64 /* MessageFlags.Ephemeral */ });
     }
     await updateTribuneMessage(interaction);
 }
@@ -574,7 +574,7 @@ async function updateTribuneMessage(interaction: any) {
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (interaction.replied || interaction.deferred) { await interaction.editReply({ files: [attachment], components: rows, content: '' }); } else { await interaction.update({ files: [attachment], components: rows, content: '' }); }
     } else {
-        await interaction.reply({ files: [attachment], components: rows, ephemeral: true });
+        await interaction.reply({ files: [attachment], components: rows, flags: 64 /* MessageFlags.Ephemeral */ });
     }
 }
 
@@ -613,10 +613,10 @@ async function joinSlot(interaction: ButtonInteraction, slot: string) {
     const isSecondHalf = slot === 'slot2_1' || slot === 'slot2_2';
 
     if (isFirstHalf && (tribune.slot1_1 === interaction.user.id || tribune.slot1_2 === interaction.user.id)) {
-        return interaction.reply({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', ephemeral: true });
+        return interaction.reply({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', flags: 64 /* MessageFlags.Ephemeral */ });
     }
     if (isSecondHalf && (tribune.slot2_1 === interaction.user.id || tribune.slot2_2 === interaction.user.id)) {
-        return interaction.reply({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', ephemeral: true });
+        return interaction.reply({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: interaction.user.id } });
@@ -627,8 +627,8 @@ async function handleLeaveRequest(interaction: ButtonInteraction) {
     const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!tribune) return;
     const userSlots = getUserSlots(tribune, interaction.user.id);
-    if (userSlots.length === 0) return interaction.reply({ content: 'Вы не записаны.', ephemeral: true });
-    if (userSlots.length === 1) { await leaveSpecificSlot(interaction, userSlots[0]); } else { const select = new StringSelectMenuBuilder().setCustomId('select_leave_slot').setPlaceholder('Выберите место для освобождения').addOptions(userSlots.map(s => new StringSelectMenuOptionBuilder().setLabel(`Место ${s.replace('slot','').replace('_','.')}`).setValue(s))); await interaction.reply({ content: 'Отмена записи:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], ephemeral: true }); }
+    if (userSlots.length === 0) return interaction.reply({ content: 'Вы не записаны.', flags: 64 /* MessageFlags.Ephemeral */ });
+    if (userSlots.length === 1) { await leaveSpecificSlot(interaction, userSlots[0]); } else { const select = new StringSelectMenuBuilder().setCustomId('select_leave_slot').setPlaceholder('Выберите место для освобождения').addOptions(userSlots.map(s => new StringSelectMenuOptionBuilder().setLabel(`Место ${s.replace('slot','').replace('_','.')}`).setValue(s))); await interaction.reply({ content: 'Отмена записи:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], flags: 64 /* MessageFlags.Ephemeral */ }); }
 }
 
 async function leaveSpecificSlot(interaction: any, slot: string) {
@@ -640,7 +640,7 @@ async function leaveSpecificSlot(interaction: any, slot: string) {
 
 async function cancelTribune(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Только кураторы могут отменить трибуну.', ephemeral: true });
+        return interaction.reply({ content: '❌ Только кураторы могут отменить трибуну.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
@@ -651,7 +651,7 @@ async function cancelTribune(interaction: ButtonInteraction) {
 
 async function completeTribune(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Только кураторы могут завершать трибуну.', ephemeral: true });
+        return interaction.reply({ content: '❌ Только кураторы могут завершать трибуну.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
@@ -687,7 +687,7 @@ async function clearHistory(interaction: ButtonInteraction) {
 
 async function showEventSelector(interaction: ButtonInteraction) { 
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: '❌ У вас нет прав для создания событий.', ephemeral: true });
+        return interaction.reply({ content: '❌ У вас нет прав для создания событий.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
     const select = new StringSelectMenuBuilder()
         .setCustomId('select_event_type')
@@ -703,13 +703,13 @@ async function showEventSelector(interaction: ButtonInteraction) {
     await interaction.update({ content: 'Тип трибуны:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], files: [] }); 
 }
 async function showDateModal(interaction: any, eventType: string) { const modal = new ModalBuilder().setCustomId(`modal_create_tribune:${eventType}`).setTitle('Параметры'); modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('date_input').setLabel("Дата/время").setStyle(TextInputStyle.Short).setRequired(true))); await interaction.showModal(modal); }
-async function createTribuneInDb(interaction: any, type: string, dateTime: string) { await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); await interaction.reply({ content: `✅ Создано!`, ephemeral: true }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
+async function createTribuneInDb(interaction: any, type: string, dateTime: string) { await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); await interaction.reply({ content: `✅ Создано!`, flags: 64 /* MessageFlags.Ephemeral */ }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
 async function viewHostsNorms(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+        return interaction.reply({ content: 'У вас нет прав для этого.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
 
     try {
         const guild = interaction.guild;
@@ -761,10 +761,10 @@ async function viewHostsNorms(interaction: ButtonInteraction) {
 
 async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+        return interaction.reply({ content: 'У вас нет прав для этого.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
 
     try {
         const guild = interaction.guild;
@@ -876,7 +876,7 @@ async function denyTikTok(interaction: ButtonInteraction, tiktokId: string, clie
 
 async function viewDetailedHostList(interaction: ButtonInteraction, page: number = 0) {
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+        return interaction.reply({ content: 'У вас нет прав для этого.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     // Проверяем: это переключение страницы (ID содержит номер) или новый вызов из профиля
@@ -887,7 +887,7 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
         await interaction.deferUpdate().catch(() => {});
     } else {
         // Если это первый вызов из профиля — создаем новое ephemeral сообщение
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     try {
@@ -1006,7 +1006,7 @@ async function startReprimandManage(interaction: ButtonInteraction) {
             .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    await interaction.reply({ embeds: [embed], components: [row], flags: 64 /* MessageFlags.Ephemeral */ });
 }
 
 async function chooseReprimandUser(interaction: ButtonInteraction, action: string) {
@@ -1067,7 +1067,7 @@ async function handleReprimandUserSelection(interaction: StringSelectMenuInterac
 
 async function startNormaManage(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
-        return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
+        return interaction.reply({ content: 'У вас нет прав для этого.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     const embed = new EmbedBuilder()
@@ -1086,7 +1086,7 @@ async function startNormaManage(interaction: ButtonInteraction) {
             .setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    await interaction.reply({ embeds: [embed], components: [row], flags: 64 /* MessageFlags.Ephemeral */ });
 }
 
 async function chooseNormaType(interaction: ButtonInteraction, action: string) {
@@ -1188,14 +1188,14 @@ async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: str
     const match = dateStr.match(datePattern);
 
     if (!match) {
-        return interaction.reply({ content: '❌ Неверный формат даты! Используйте ДД.ММ.ГГГГ', ephemeral: true });
+        return interaction.reply({ content: '❌ Неверный формат даты! Используйте ДД.ММ.ГГГГ', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     const [, d, m, y] = match;
     const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0);
 
     if (isNaN(date.getTime())) {
-        return interaction.reply({ content: '❌ Введена некорректная дата!', ephemeral: true });
+        return interaction.reply({ content: '❌ Введена некорректная дата!', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     const updateData = type === 'tribune'
@@ -1210,7 +1210,7 @@ async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: str
 
     await interaction.reply({ 
         content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТоки'}** для <@${targetId}> выдана от даты **${dateStr}**!`, 
-        ephemeral: true 
+        flags: 64 /* MessageFlags.Ephemeral */ 
     });
 
     // Уведомление в ЛС
@@ -1242,7 +1242,7 @@ async function finalizeNormaRemove(interaction: ButtonInteraction, type: string,
 // --- СИСТЕМА СОБЕСЕДОВАНИЙ ---
 
 async function startInterviewModal(interaction: ButtonInteraction) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
     const modal = new ModalBuilder().setCustomId('modal_interview_target').setTitle('Начало собеседования');
     const input = new TextInputBuilder().setCustomId('target_id').setLabel('Discord ID кандидата').setStyle(TextInputStyle.Short).setRequired(true);
@@ -1251,7 +1251,7 @@ async function startInterviewModal(interaction: ButtonInteraction) {
 }
 
 async function startInterview(interaction: ModalSubmitInteraction, targetId: string) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
     // Пытаемся найти пользователя на сервере или глобально через API
     let username = targetId;
@@ -1261,7 +1261,7 @@ async function startInterview(interaction: ModalSubmitInteraction, targetId: str
         username = member.user.username;
     } else {
         const user = await interaction.client.users.fetch(targetId).catch(() => null);
-        if (!user) return interaction.reply({ content: '❌ Пользователь с таким ID не найден в Discord (проверьте правильность ввода).', ephemeral: true });
+        if (!user) return interaction.reply({ content: '❌ Пользователь с таким ID не найден в Discord (проверьте правильность ввода).', flags: 64 /* MessageFlags.Ephemeral */ });
         username = user.username;
     }
 
@@ -1276,7 +1276,7 @@ async function startInterview(interaction: ModalSubmitInteraction, targetId: str
 }
 
 async function renderInterviewQuestion(interaction: any, targetId: string, qIdx: number, score: number, showAnswer: boolean) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ Отказано в доступе.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ Отказано в доступе.', flags: 64 /* MessageFlags.Ephemeral */ });
 
     if (qIdx >= interviewQuestions.length) {
         return renderInterviewResult(interaction, targetId, score);
@@ -1306,7 +1306,12 @@ async function renderInterviewQuestion(interaction: any, targetId: string, qIdx:
 
     const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-    await (interaction as any)[method]({ embeds: [embed], components: [row1, row2], ephemeral: true, content: null });
+    await (interaction as any)[method]({ 
+        embeds: [embed], 
+        components: [row1, row2], 
+        ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}),
+        content: null 
+    });
 }
 
 async function renderInterviewText(interaction: any, targetId: string, qIdx: number, score: number) {
@@ -1361,7 +1366,7 @@ async function finalizeInterview(interaction: ButtonInteraction, targetId: strin
 // --- УПРАВЛЕНИЕ ИСТОРИЕЙ ---
 
 async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: string) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории собеседований.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории собеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
     const history = await (prisma as any).interview.findMany({
         where: targetId ? { targetId } : {},
@@ -1379,7 +1384,11 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
         embed.setDescription('*Записей не найдено.*');
         const isComp = interaction.isButton?.() || interaction.isStringSelectMenu?.();
         const meth = isComp ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-        return (interaction as any)[meth]({ embeds: [embed], components: [], ephemeral: true });
+        return (interaction as any)[meth]({ 
+            embeds: [embed], 
+            components: [], 
+            ...(meth !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+        });
     }
 
     const description = history.map((h: any, i: number) => {
@@ -1411,7 +1420,11 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
     
     const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-    await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
+    await (interaction as any)[method]({ 
+        embeds: [embed], 
+        components, 
+        ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+    });
 }
 
 async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
@@ -1487,7 +1500,11 @@ async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInte
         embed.setDescription('*История трибун пуста.*');
         const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
         const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-        return (interaction as any)[method]({ embeds: [embed], components: [], ephemeral: true });
+        return (interaction as any)[method]({ 
+            embeds: [embed], 
+            components: [], 
+            ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+        });
     }
 
     const description = history.map((h, i) => {
@@ -1516,20 +1533,24 @@ async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInte
     
     const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-    await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
+    await (interaction as any)[method]({ 
+        embeds: [embed], 
+        components, 
+        ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+    });
 }
 
 // --- СИСТЕМА ПЕРЕСОБЕСЕДОВАНИЙ ---
 
 async function startReInterviewSelection(interaction: ButtonInteraction) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения пересобеседований.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения пересобеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
     const guild = interaction.guild;
     if (!guild) return;
     const hosts = await getHosts(guild);
     
     if (hosts.size === 0) {
-        return interaction.reply({ content: '❌ Ведущие не найдены.', ephemeral: true });
+        return interaction.reply({ content: '❌ Ведущие не найдены.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     const select = new StringSelectMenuBuilder()
@@ -1547,7 +1568,7 @@ async function startReInterviewSelection(interaction: ButtonInteraction) {
     await interaction.reply({ 
         content: '🎙️ **Пересобеседование ведущего**\nВыберите пользователя из официального списка ведущих:', 
         components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
-        ephemeral: true 
+        flags: 64 /* MessageFlags.Ephemeral */ 
     });
 }
 
@@ -1556,7 +1577,7 @@ async function startReInterviewDetails(interaction: StringSelectMenuInteraction,
 }
 
 async function renderReInterview(interaction: any, targetId: string, qIdx: number, score: number, sIdx: number, tab: 'q' | 's', showAnswer: boolean) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ Отказано в доступе.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ Отказано в доступе.', flags: 64 /* MessageFlags.Ephemeral */ });
 
     const isQuestionsDone = qIdx >= reInterviewQuestions.length;
     const isSituationsDone = sIdx >= reInterviewSituations.length;
@@ -1636,7 +1657,12 @@ async function renderReInterview(interaction: any, targetId: string, qIdx: numbe
 
     const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-    await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true, content: null });
+    await (interaction as any)[method]({ 
+        embeds: [embed], 
+        components, 
+        ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}), 
+        content: null 
+    });
 }
 
 async function finalizeReInterview(interaction: ButtonInteraction, targetId: string, score: number, sIdx: number, status: 'PASS' | 'FAIL') {
@@ -1657,10 +1683,10 @@ async function finalizeReInterview(interaction: ButtonInteraction, targetId: str
 }
 
 async function viewReInterviewHistory(interaction: ButtonInteraction) {
-    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории пересобеседований.', ephemeral: true });
+    if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории пересобеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
     // Defer reply for history
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
 
     const history = await (prisma as any).reInterview.findMany({
         take: 15,

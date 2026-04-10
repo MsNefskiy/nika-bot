@@ -1,7 +1,8 @@
 import { 
     SlashCommandBuilder, 
     ChatInputCommandInteraction, 
-    AttachmentBuilder 
+    AttachmentBuilder,
+    MessageFlags
 } from 'discord.js';
 import { MyClient } from '../types';
 import { CanvasHelper } from '../utils/canvasHelper';
@@ -49,7 +50,7 @@ export default {
         }
         
         // Показ прогресса (deferred) так как генерация картинки может занять время
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
 
         // Отрисовка
         const avatarUrl = targetUser.displayAvatarURL({ extension: 'png' });

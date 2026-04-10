@@ -4,7 +4,8 @@ import {
     AttachmentBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle 
+    ButtonStyle, 
+    MessageFlags 
 } from 'discord.js';
 import { MyClient } from '../types';
 import { CanvasHelper } from '../utils/canvasHelper';
@@ -139,6 +140,6 @@ export default {
             rows.push(starRow1, starRow2);
         }
 
-        await interaction.reply({ files: [attachment], components: rows, ephemeral: true });
+        await interaction.reply({ files: [attachment], components: rows, flags: 64 /* MessageFlags.Ephemeral */ });
     },
 };

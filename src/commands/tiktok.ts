@@ -4,7 +4,8 @@ import {
     EmbedBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
-    ButtonStyle 
+    ButtonStyle,
+    MessageFlags
 } from 'discord.js';
 import { MyClient } from '../types';
 import { prisma } from '../handlers/db';
@@ -36,7 +37,7 @@ export default {
         if (!member?.roles?.cache?.has(HOST_ROLE_ID)) {
             return interaction.reply({ 
                 content: '❌ Эта команда доступна только Ведущим.', 
-                ephemeral: true 
+                flags: 64 /* MessageFlags.Ephemeral */ 
             });
         }
 
@@ -49,7 +50,7 @@ export default {
             if (!url.includes('tiktok.com')) {
                 return interaction.reply({ 
                     content: '❌ Пожалуйста, укажите верную ссылку на TikTok.', 
-                    ephemeral: true 
+                    flags: 64 /* MessageFlags.Ephemeral */ 
                 });
             }
 
@@ -64,7 +65,7 @@ export default {
 
             await interaction.reply({ 
                 content: '✅ Видео отправлено на проверку кураторам! Ожидайте уведомления.', 
-                ephemeral: true 
+                flags: 64 /* MessageFlags.Ephemeral */ 
             });
 
             // 3. Уведомляем кураторов
