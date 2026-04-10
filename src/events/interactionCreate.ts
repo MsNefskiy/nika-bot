@@ -67,9 +67,14 @@ export default {
                 if (id.startsWith('confirm_buy:')) await processPurchase(interaction, id.split(':')[1], client);
 
                 // --- УПРАВЛЕНИЕ НОРМОЙ (АДМИН) ---
+                if (id === 'admin_view_host_list') await viewDetailedHostList(interaction as ButtonInteraction);
                 if (id === 'admin_norma_manage') await startNormaManage(interaction as ButtonInteraction);
                 if (id.startsWith('norma_action:')) await chooseNormaType(interaction as ButtonInteraction, id.split(':')[1]);
                 if (id.startsWith('norma_type:')) await chooseNormaUser(interaction as ButtonInteraction, id.split(':')[1], id.split(':')[2]);
+                if (id.startsWith('confirm_norma_remove:')) {
+                    const [, type, targetId] = id.split(':');
+                    await finalizeNormaRemove(interaction as ButtonInteraction, type, targetId);
+                }
                 
                 // --- ТИКТОКИ (ОДОБРЕНИЕ) ---
                 if (id.startsWith('approve_tiktok_')) await approveTikTok(interaction as ButtonInteraction, id.split('_')[2], client);
@@ -988,21 +993,23 @@ async function chooseNormaUser(interaction: ButtonInteraction, action: string, t
 
 async function handleNormaUserSelection(interaction: StringSelectMenuInteraction, action: string, type: string, targetId: string) {
     if (action === 'remove') {
-        const updateData = type === 'tribune' 
-            ? { hasNorma: false, normaLastUpdated: null } 
-            : { tiktokNormaLastUpdated: null };
+        const embed = new EmbedBuilder()
+            .setTitle('⚠️ Подтверждение снятия нормы')
+            .setDescription(`Вы действительно хотите снять норму по **${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}** для <@${targetId}>?`)
+            .setColor('#ff4747');
 
-        await prisma.user.upsert({
-            where: { discordId: targetId },
-            update: updateData as any,
-            create: { discordId: targetId, username: 'Ведущий', ...updateData } as any
-        });
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`confirm_norma_remove:${type}:${targetId}`)
+                .setLabel('Да, снять')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('admin_norma_manage')
+                .setLabel('Отмена')
+                .setStyle(ButtonStyle.Secondary)
+        );
 
-        return interaction.update({ 
-            content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}** для <@${targetId}> успешно снята.`, 
-            embeds: [], 
-            components: [] 
-        });
+        return interaction.update({ embeds: [embed], components: [row] });
     }
 
     // Если выдача - показываем модал
@@ -1060,4 +1067,22 @@ async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: str
     if (member) {
         await member.send(`🌟 **Куратор подтвердил вашу норму по ${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}!**\nДата подтверждения: **${dateStr}**`).catch(() => {});
     }
+}
+
+async function finalizeNormaRemove(interaction: ButtonInteraction, type: string, targetId: string) {
+    const updateData = type === 'tribune' 
+        ? { hasNorma: false, normaLastUpdated: null } 
+        : { tiktokNormaLastUpdated: null };
+
+    await prisma.user.upsert({
+        where: { discordId: targetId },
+        update: updateData as any,
+        create: { discordId: targetId, username: 'Ведущий', ...updateData } as any
+    });
+
+    await interaction.update({ 
+        content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}** для <@${targetId}> успешно снята.`, 
+        embeds: [], 
+        components: [] 
+    });
 }
