@@ -1354,7 +1354,6 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
     const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
     await (interaction as any)[method]({ embeds: [embed], components, ephemeral: true });
 }
-}
 
 async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
     const embed = new EmbedBuilder()
