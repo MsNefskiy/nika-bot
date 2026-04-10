@@ -91,17 +91,13 @@ export default {
         if (curatorStatus) {
             const curatorRow1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
-                    .setCustomId('admin_issue_reprimand')
-                    .setLabel('Выдать выговор')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId('admin_remove_reprimand')
-                    .setLabel('Снять выговор')
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
                     .setCustomId('admin_norma_manage')
                     .setLabel('🔧 Управление нормой')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('admin_reprimand_manage')
+                    .setLabel('🔧 Управление выговорами')
+                    .setStyle(ButtonStyle.Danger)
             );
 
             const curatorRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(

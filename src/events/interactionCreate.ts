@@ -67,10 +67,15 @@ export default {
                 if (id.startsWith('confirm_buy:')) await processPurchase(interaction, id.split(':')[1], client);
 
                 // --- УПРАВЛЕНИЕ НОРМОЙ (АДМИН) ---
-                if (id === 'admin_view_host_list') await viewDetailedHostList(interaction as ButtonInteraction);
+                if (id.startsWith('admin_view_host_list')) {
+                    const page = parseInt(id.split(':')[1]) || 0;
+                    await viewDetailedHostList(interaction as ButtonInteraction, page);
+                }
                 if (id === 'admin_norma_manage') await startNormaManage(interaction as ButtonInteraction);
+                if (id === 'admin_reprimand_manage') await startReprimandManage(interaction as ButtonInteraction);
                 if (id.startsWith('norma_action:')) await chooseNormaType(interaction as ButtonInteraction, id.split(':')[1]);
                 if (id.startsWith('norma_type:')) await chooseNormaUser(interaction as ButtonInteraction, id.split(':')[1], id.split(':')[2]);
+                if (id.startsWith('reprimand_action:')) await chooseReprimandUser(interaction as ButtonInteraction, id.split(':')[1]);
                 if (id.startsWith('confirm_norma_remove:')) {
                     const [, type, targetId] = id.split(':');
                     await finalizeNormaRemove(interaction as ButtonInteraction, type, targetId);
@@ -99,6 +104,11 @@ export default {
                 }
                 if (interaction.customId === 'select_reprimand_to_delete') {
                     await finalizeReprimandRemove(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0], client);
+                }
+
+                if (interaction.customId.startsWith('reprimand_user_select:')) {
+                    const [, action] = interaction.customId.split(':');
+                    await handleReprimandUserSelection(interaction as StringSelectMenuInteraction, action, (interaction as StringSelectMenuInteraction).values[0]);
                 }
 
                 // Магазин: Выбор товара
@@ -454,6 +464,9 @@ async function renderTribuneView(interaction: ButtonInteraction) {
 }
 
 async function updateTribuneMessage(interaction: any) {
+    if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferUpdate().catch(() => {});
+    }
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
     const hostNames: any = {};
@@ -811,21 +824,24 @@ async function denyTikTok(interaction: ButtonInteraction, tiktokId: string, clie
     }
 }
 
-async function viewDetailedHostList(interaction: ButtonInteraction) {
+async function viewDetailedHostList(interaction: ButtonInteraction, page: number = 0) {
     if (!isAdmin(interaction.user.id)) {
         return interaction.reply({ content: 'У вас нет прав для этого.', ephemeral: true });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+    }
 
     try {
         const guild = interaction.guild;
         if (!guild) return;
 
         // 1. Получаем участников с ролью ведущего
-        const hosts = await getHosts(guild);
+        const hostsCollection = await getHosts(guild);
+        const hosts = Array.from(hostsCollection.values());
 
-        if (hosts.size === 0) {
+        if (hosts.length === 0) {
             return interaction.editReply({ content: 'Ведущие с указанной ролью не найдены.' });
         }
 
@@ -833,7 +849,7 @@ async function viewDetailedHostList(interaction: ButtonInteraction) {
         const twoWeeksAgo = new Date();
         twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-        const hostIds = Array.from(hosts.keys());
+        const hostIds = hosts.map(h => h.id);
         
         // Все выговоры для этих пользователей
         const allReprimands = await (prisma as any).reprimand.findMany({
@@ -849,16 +865,20 @@ async function viewDetailedHostList(interaction: ButtonInteraction) {
             orderBy: { closedAt: 'desc' }
         });
 
-        // 3. Формируем отчет
-        const embeds = [];
-        let currentEmbed = new EmbedBuilder()
+        // 3. Пагинация (по 5 человек на страницу для лучшей читаемости)
+        const itemsPerPage = 5;
+        const totalPages = Math.ceil(hosts.length / itemsPerPage);
+        const start = page * itemsPerPage;
+        const pageHosts = hosts.slice(start, start + itemsPerPage);
+
+        const embed = new EmbedBuilder()
             .setTitle('📋 Детальный список состава')
+            .setDescription(`Страница **${page + 1}** из **${totalPages}**`)
             .setColor('#a76eff')
             .setTimestamp();
 
-        let fieldCount = 0;
-
-        for (const [id, member] of hosts) {
+        for (const member of pageHosts) {
+            const id = member.id;
             // Выговоры
             const userReprimands = allReprimands.filter((r: any) => r.userId === id);
             const reprimandText = userReprimands.length > 0 
@@ -877,39 +897,119 @@ async function viewDetailedHostList(interaction: ButtonInteraction) {
                 ? userTribunes.map(h => `• ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`).slice(0, 5).join('\n') + (userTribunes.length > 5 ? '\n*...и еще другие*' : '')
                 : (isManualTribunePass ? '*Норма выдана вручную куратором*' : '*Нет проведенных трибун за 14 дней*');
 
-            const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n\n**🎤 Трибуны (2 нед): ${tribuneCount}**\n${tribuneDetails}`;
+            // Улучшенное форматирование: убрал лишний перенос перед "Трибуны", добавил четкий разделитель
+            const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n**🎤 Трибуны (за 2 нед): ${tribuneCount}**\n${tribuneDetails}\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
 
-            currentEmbed.addFields({
+            embed.addFields({
                 name: `👤 ${member.displayName} (${member.user.username})`,
                 value: fieldValue.substring(0, 1024),
                 inline: false
             });
-
-            fieldCount++;
-
-            if (fieldCount >= 10) { 
-                embeds.push(currentEmbed);
-                currentEmbed = new EmbedBuilder()
-                    .setTitle('📋 Детальный список состава (продолжение)')
-                    .setColor('#a76eff')
-                    .setTimestamp();
-                fieldCount = 0;
-            }
         }
 
-        if (fieldCount > 0) {
-            embeds.push(currentEmbed);
-        }
+        const row = new ActionRowBuilder<ButtonBuilder>();
+        
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`admin_view_host_list:${page - 1}`)
+                .setLabel('⬅️ Назад')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page === 0),
+            new ButtonBuilder()
+                .setCustomId(`admin_view_host_list:${page + 1}`)
+                .setLabel('Вперед ➡️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page >= totalPages - 1)
+        );
 
-        await interaction.editReply({ embeds: [embeds[0]] });
-        for (let i = 1; i < embeds.length; i++) {
-            await interaction.followUp({ embeds: [embeds[i]], ephemeral: true });
-        }
+        const method = (interaction.deferred || interaction.replied) ? 'editReply' : 'reply';
+        await (interaction as any)[method]({ 
+            embeds: [embed], 
+            components: [row],
+            ephemeral: true 
+        });
 
     } catch (e) {
         console.error('Ошибка при формировании списка ведущих:', e);
-        await interaction.editReply({ content: '❌ Произошла ошибка при сборе данных.' });
+        const method = (interaction.deferred || interaction.replied) ? 'editReply' : 'reply';
+        await (interaction as any)[method]({ content: '❌ Произошла ошибка при сборе данных.', ephemeral: true });
     }
+}
+
+// --- УПРАВЛЕНИЕ ВЫГОВОРАМИ ---
+
+async function startReprimandManage(interaction: ButtonInteraction) {
+    const embed = new EmbedBuilder()
+        .setTitle('⚙️ Управление выговорами')
+        .setDescription('Выберите действие:')
+        .setColor('#FF4747');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId('reprimand_action:issue')
+            .setLabel('Выдать выговор')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('reprimand_action:remove')
+            .setLabel('Снять выговор')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
+
+async function chooseReprimandUser(interaction: ButtonInteraction, action: string) {
+    const guild = interaction.guild;
+    if (!guild) return;
+
+    const hosts = await getHosts(guild);
+
+    if (hosts.size === 0) {
+        return interaction.update({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
+    }
+
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(`reprimand_user_select:${action}`)
+        .setPlaceholder('Выберите ведущего...')
+        .addOptions(
+            Array.from(hosts.values()).slice(0, 25).map(m => 
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(m.displayName)
+                    .setValue(m.id)
+                    .setDescription(m.user.username)
+            )
+        );
+
+    const embed = new EmbedBuilder()
+        .setTitle(`⚙️ ${action === 'issue' ? 'Выдача' : 'Снятие'} выговора`)
+        .setDescription('Выберите пользователя из списка:')
+        .setColor('#FF4747');
+
+    await interaction.update({ 
+        embeds: [embed], 
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
+    });
+}
+
+async function handleReprimandUserSelection(interaction: StringSelectMenuInteraction, action: string, targetId: string) {
+    if (action === 'remove') {
+        return showReprimandsToRemove(interaction, targetId);
+    }
+
+    // Выдача выговора
+    const modal = new ModalBuilder()
+        .setCustomId(`modal_issue_reprimand:${targetId}`)
+        .setTitle('Выдача выговора');
+
+    const reasonInput = new TextInputBuilder()
+        .setCustomId('reprimand_reason')
+        .setLabel('Причина выговора')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput));
+
+    await interaction.showModal(modal);
 }
 
 // --- УПРАВЛЕНИЕ НОРМОЙ ---
