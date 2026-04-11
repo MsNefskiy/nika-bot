@@ -200,6 +200,11 @@ export default {
                 if (interaction.customId === 'select_shop_item') {
                     await handleShopSelection(interaction as StringSelectMenuInteraction, (interaction as StringSelectMenuInteraction).values[0]);
                 }
+
+                if (interaction.customId.startsWith('reprimand_user_select:')) {
+                    const [, action] = interaction.customId.split(':');
+                    await handleReprimandUserSelection(interaction as StringSelectMenuInteraction, action, (interaction as StringSelectMenuInteraction).values[0]);
+                }
             }
 
             if (interaction.isModalSubmit()) {
@@ -296,12 +301,14 @@ async function handleShopSelection(interaction: StringSelectMenuInteraction, ite
 }
 
 async function processPurchase(interaction: ButtonInteraction, itemId: string, client: MyClient) {
+    await interaction.deferUpdate().catch(() => {});
+
     const item = shopItems.find(i => i.id === itemId);
     if (!item) return;
 
     const user = await prisma.user.findUnique({ where: { discordId: interaction.user.id } });
     if (!user || user.stars < item.price) {
-        return interaction.update({ 
+        return interaction.editReply({ 
             content: `❌ Недостаточно звезд! У вас: **${user?.stars || 0}**, нужно: **${item.price}**.`, 
             embeds: [], 
             components: [] 
@@ -313,7 +320,7 @@ async function processPurchase(interaction: ButtonInteraction, itemId: string, c
         data: { stars: { decrement: item.price } }
     });
 
-    await interaction.update({ 
+    await interaction.editReply({ 
         content: `✅ Вы успешно купили **${item.name}**! Кураторы уведомлены и свяжутся с вами для выдачи.`, 
         embeds: [], 
         components: [] 
@@ -411,13 +418,18 @@ async function initiateReprimandRemove(interaction: ButtonInteraction) {
     await interaction.showModal(modal);
 }
 
-async function showReprimandsToRemove(interaction: ModalSubmitInteraction | StringSelectMenuInteraction, targetId: string) {
+async function showReprimandsToRemove(interaction: ModalSubmitInteraction | StringSelectMenuInteraction | ButtonInteraction, targetId: string) {
+    if (interaction.isStringSelectMenu() || interaction.isButton()) {
+        await interaction.deferUpdate().catch(() => {});
+    } else if (interaction.isModalSubmit()) {
+        await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ }).catch(() => {});
+    }
+
     const reprimands = await prisma.reprimand.findMany({ where: { userId: targetId }, take: 25 });
     
     if (reprimands.length === 0) {
         const msg = { content: '❌ У этого пользователя нет активных выговоров в базе.', components: [] };
-        if (interaction.isModalSubmit()) return interaction.reply({ ...msg, flags: 64 /* MessageFlags.Ephemeral */ });
-        else return interaction.update(msg);
+        return interaction.editReply(msg);
     }
 
     const select = new StringSelectMenuBuilder()
@@ -430,16 +442,17 @@ async function showReprimandsToRemove(interaction: ModalSubmitInteraction | Stri
         components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)]
     };
 
-    if (interaction.isModalSubmit()) await interaction.reply({ ...replyData, flags: 64 /* MessageFlags.Ephemeral */ });
-    else await interaction.update(replyData);
+    await interaction.editReply(replyData);
 }
 
 async function finalizeReprimandRemove(interaction: StringSelectMenuInteraction, reprimandId: string, client: MyClient) {
+    await interaction.deferUpdate().catch(() => {});
+
     const reprimand = await prisma.reprimand.findUnique({ where: { id: reprimandId } });
-    if (!reprimand) return interaction.update({ content: 'Выговор не найден.', components: [] });
+    if (!reprimand) return interaction.editReply({ content: 'Выговор не найден.', components: [] });
 
     await prisma.reprimand.delete({ where: { id: reprimandId } });
-    await interaction.update({ content: '✅ Выговор успешно снят!', components: [] });
+    await interaction.editReply({ content: '✅ Выговор успешно снят!', components: [] });
 
     const target = await client.users.fetch(reprimand.userId).catch(() => null);
     if (target) {
@@ -518,17 +531,19 @@ async function submitTaskToCurators(interaction: ButtonInteraction, client: MyCl
 }
 
 async function approveTask(interaction: ButtonInteraction, userId: string, client: MyClient) {
+    await interaction.deferUpdate().catch(() => {});
     const user = await prisma.user.findUnique({ where: { discordId: userId } });
-    if (!user) return (interaction as any).update({ content: 'Ошибка: пользователь не найден.', components: [] });
+    if (!user) return (interaction as any).editReply({ content: 'Ошибка: пользователь не найден.', components: [] });
     await prisma.user.update({ where: { discordId: userId }, data: { stars: { increment: 50 }, isTaskDone: true, isTaskPending: false } });
-    await (interaction as any).update({ content: `✅ Задание <@${userId}> одобрено. +50 звезд начислено!`, components: [] });
+    await (interaction as any).editReply({ content: `✅ Задание <@${userId}> одобрено. +50 звезд начислено!`, components: [] });
     const targetUser = await client.users.fetch(userId).catch(() => null);
     if (targetUser) { await targetUser.send('🌟 Куратор одобрил твое задание! Тебе начислено **50 звезд**.').catch(() => {}); }
 }
 
 async function denyTask(interaction: ButtonInteraction, userId: string, client: MyClient) {
+    await interaction.deferUpdate().catch(() => {});
     await prisma.user.update({ where: { discordId: userId }, data: { isTaskPending: false } });
-    await (interaction as any).update({ content: `❌ Задание <@${userId}> отклонено.`, components: [] });
+    await (interaction as any).editReply({ content: `❌ Задание <@${userId}> отклонено.`, components: [] });
     const targetUser = await client.users.fetch(userId).catch(() => null);
     if (targetUser) { await targetUser.send('❌ Твое задание было отклонено за несоответствие. Попробуй еще раз!').catch(() => {}); }
 }
@@ -608,6 +623,7 @@ function createTribuneButtons(tribune: any, userId: string) {
 function getUserSlots(tribune: any, userId: string): string[] { const slots = ['slot1_1', 'slot1_2', 'slot2_1', 'slot2_2']; return slots.filter(s => (tribune as any)[s] === userId); }
 
 async function joinSlot(interaction: ButtonInteraction, slot: string) {
+    await interaction.deferUpdate().catch(() => {});
     const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!tribune || (tribune as any)[slot]) return;
 
@@ -615,10 +631,10 @@ async function joinSlot(interaction: ButtonInteraction, slot: string) {
     const isSecondHalf = slot === 'slot2_1' || slot === 'slot2_2';
 
     if (isFirstHalf && (tribune.slot1_1 === interaction.user.id || tribune.slot1_2 === interaction.user.id)) {
-        return interaction.reply({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', flags: 64 /* MessageFlags.Ephemeral */ });
+        return interaction.editReply({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', embeds: [], components: [], files: [] });
     }
     if (isSecondHalf && (tribune.slot2_1 === interaction.user.id || tribune.slot2_2 === interaction.user.id)) {
-        return interaction.reply({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', flags: 64 /* MessageFlags.Ephemeral */ });
+        return interaction.editReply({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', embeds: [], components: [], files: [] });
     }
 
     await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: interaction.user.id } });
@@ -634,6 +650,7 @@ async function handleLeaveRequest(interaction: ButtonInteraction) {
 }
 
 async function leaveSpecificSlot(interaction: any, slot: string) {
+    await interaction.deferUpdate().catch(() => {});
     const tribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!tribune) return;
     await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: null } });
@@ -644,10 +661,11 @@ async function cancelTribune(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
         return interaction.reply({ content: '❌ Только кураторы могут отменить трибуну.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
+    await interaction.deferUpdate().catch(() => {});
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
     await prisma.tribune.delete({ where: { id: activeTribune.id } });
-    await interaction.update({ content: '❌ Трибуна отменена.', components: [], files: [] });
+    await interaction.editReply({ content: '❌ Трибуна отменена.', components: [], files: [] });
     setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
 
@@ -655,6 +673,7 @@ async function completeTribune(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
         return interaction.reply({ content: '❌ Только кураторы могут завершать трибуну.', flags: 64 /* MessageFlags.Ephemeral */ });
     }
+    await interaction.deferUpdate().catch(() => {});
     const activeTribune = await prisma.tribune.findFirst({ where: { status: 'ACTIVE' } });
     if (!activeTribune) return;
     const hostIds = [activeTribune.slot1_1, activeTribune.slot1_2, activeTribune.slot2_1, activeTribune.slot2_2].filter(id => id !== null) as string[];
@@ -672,7 +691,7 @@ async function completeTribune(interaction: ButtonInteraction) {
     }
 
     await prisma.tribune.delete({ where: { id: activeTribune.id } });
-    await interaction.update({ content: '✅ Трибуна завершена! Норма ведущим проставлена.', components: [], files: [] });
+    await interaction.editReply({ content: '✅ Трибуна завершена! Норма ведущим проставлена.', components: [], files: [] });
     setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
 
@@ -681,8 +700,9 @@ async function completeTribune(interaction: ButtonInteraction) {
 async function clearHistory(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) return;
     
+    await interaction.deferUpdate().catch(() => {});
     await prisma.tribuneHistory.deleteMany({});
-    await interaction.update({ content: '✅ История трибун успешно очищена!', embeds: [], components: [] });
+    await interaction.editReply({ content: '✅ История трибун успешно очищена!', embeds: [], components: [] });
     
     setTimeout(() => interaction.deleteReply().catch(() => {}), 5000);
 }
@@ -705,7 +725,13 @@ async function showEventSelector(interaction: ButtonInteraction) {
     await interaction.update({ content: 'Тип трибуны:', components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)], files: [] }); 
 }
 async function showDateModal(interaction: any, eventType: string) { const modal = new ModalBuilder().setCustomId(`modal_create_tribune:${eventType}`).setTitle('Параметры'); modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('date_input').setLabel("Дата/время").setStyle(TextInputStyle.Short).setRequired(true))); await interaction.showModal(modal); }
-async function createTribuneInDb(interaction: any, type: string, dateTime: string) { await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); await interaction.reply({ content: `✅ Создано!`, flags: 64 /* MessageFlags.Ephemeral */ }); setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); }
+async function createTribuneInDb(interaction: ModalSubmitInteraction, type: string, dateTime: string) { 
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
+    await prisma.tribune.create({ data: { type, dateTime, creatorId: interaction.user.id, status: 'ACTIVE' } }); 
+    await prisma.user.upsert({ where: { discordId: interaction.user.id }, update: { username: interaction.user.username }, create: { discordId: interaction.user.id, username: interaction.user.username } }); 
+    await interaction.editReply({ content: `✅ Создано!` }); 
+    setTimeout(() => interaction.deleteReply().catch(() => {}), 5000); 
+}
 async function viewHostsNorms(interaction: ButtonInteraction) {
     if (!isAdmin(interaction.user.id)) {
         return interaction.reply({ content: 'У вас нет прав для этого.', flags: 64 /* MessageFlags.Ephemeral */ });
@@ -835,15 +861,16 @@ async function viewHostsTikTokNorms(interaction: ButtonInteraction) {
 
 
 async function approveTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
+    await interaction.deferUpdate().catch(() => {});
     const tiktok = await prisma.tikTok.findUnique({ where: { id: tiktokId } });
-    if (!tiktok) return interaction.update({ content: '❌ ТикТок не найден.', components: [] });
+    if (!tiktok) return interaction.editReply({ content: '❌ ТикТок не найден.', components: [] });
 
     await prisma.tikTok.update({
         where: { id: tiktokId },
         data: { status: 'APPROVED' }
     });
 
-    await interaction.update({ 
+    await interaction.editReply({ 
         content: `✅ ТикТок пользователя <@${tiktok.userId}> одобрен!`, 
         embeds: [], 
         components: [] 
@@ -856,15 +883,16 @@ async function approveTikTok(interaction: ButtonInteraction, tiktokId: string, c
 }
 
 async function denyTikTok(interaction: ButtonInteraction, tiktokId: string, client: MyClient) {
+    await interaction.deferUpdate().catch(() => {});
     const tiktok = await prisma.tikTok.findUnique({ where: { id: tiktokId } });
-    if (!tiktok) return interaction.update({ content: '❌ ТикТок не найден.', components: [] });
+    if (!tiktok) return interaction.editReply({ content: '❌ ТикТок не найден.', components: [] });
 
     await prisma.tikTok.update({
         where: { id: tiktokId },
         data: { status: 'DENIED' }
     });
 
-    await interaction.update({ 
+    await interaction.editReply({ 
         content: `❌ ТикТок пользователя <@${tiktok.userId}> отклонен.`, 
         embeds: [], 
         components: [] 
@@ -1189,19 +1217,21 @@ async function handleNormaUserSelection(interaction: StringSelectMenuInteraction
 }
 
 async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: string, targetId: string, dateStr: string, client: MyClient) {
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
+
     // Валидация даты
     const datePattern = /^(\d{2})\.(\d{2})\.(\d{4})$/;
     const match = dateStr.match(datePattern);
 
     if (!match) {
-        return interaction.reply({ content: '❌ Неверный формат даты! Используйте ДД.ММ.ГГГГ', flags: 64 /* MessageFlags.Ephemeral */ });
+        return interaction.editReply({ content: '❌ Неверный формат даты! Используйте ДД.ММ.ГГГГ' });
     }
 
     const [, d, m, y] = match;
     const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0);
 
     if (isNaN(date.getTime())) {
-        return interaction.reply({ content: '❌ Введена некорректная дата!', flags: 64 /* MessageFlags.Ephemeral */ });
+        return interaction.editReply({ content: '❌ Введена некорректная дата!' });
     }
 
     const updateData = type === 'tribune'
@@ -1214,9 +1244,8 @@ async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: str
         create: { discordId: targetId, username: 'Ведущий', ...updateData } as any
     });
 
-    await interaction.reply({ 
+    await interaction.editReply({ 
         content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТоки'}** для <@${targetId}> выдана от даты **${dateStr}**!`, 
-        flags: 64 /* MessageFlags.Ephemeral */ 
     });
 
     // Уведомление в ЛС
@@ -1227,6 +1256,8 @@ async function finalizeNormaIssue(interaction: ModalSubmitInteraction, type: str
 }
 
 async function finalizeNormaRemove(interaction: ButtonInteraction, type: string, targetId: string) {
+    await interaction.deferUpdate();
+
     const updateData = type === 'tribune' 
         ? { hasNorma: false, normaLastUpdated: null } 
         : { tiktokNormaLastUpdated: null };
@@ -1237,7 +1268,7 @@ async function finalizeNormaRemove(interaction: ButtonInteraction, type: string,
         create: { discordId: targetId, username: 'Ведущий', ...updateData } as any
     });
 
-    await interaction.update({ 
+    await interaction.editReply({ 
         content: `✅ Норма по **${type === 'tribune' ? 'Трибунам' : 'ТикТокам'}** для <@${targetId}> успешно снята.`, 
         embeds: [], 
         components: [] 
@@ -1259,6 +1290,8 @@ async function startInterviewModal(interaction: ButtonInteraction) {
 async function startInterview(interaction: ModalSubmitInteraction, targetId: string) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения собеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
+
     // Пытаемся найти пользователя на сервере или глобально через API
     let username = targetId;
     const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
@@ -1267,7 +1300,7 @@ async function startInterview(interaction: ModalSubmitInteraction, targetId: str
         username = member.user.username;
     } else {
         const user = await interaction.client.users.fetch(targetId).catch(() => null);
-        if (!user) return interaction.reply({ content: '❌ Пользователь с таким ID не найден в Discord (проверьте правильность ввода).', flags: 64 /* MessageFlags.Ephemeral */ });
+        if (!user) return interaction.editReply({ content: '❌ Пользователь с таким ID не найден в Discord (проверьте правильность ввода).' });
         username = user.username;
     }
 
@@ -1353,6 +1386,8 @@ async function renderInterviewResult(interaction: any, targetId: string, score: 
 }
 
 async function finalizeInterview(interaction: ButtonInteraction, targetId: string, score: number, status: 'PASS' | 'FAIL') {
+    await interaction.deferUpdate();
+
     await prisma.interview.create({
         data: {
             targetId,
@@ -1362,7 +1397,7 @@ async function finalizeInterview(interaction: ButtonInteraction, targetId: strin
         }
     });
 
-    await interaction.update({
+    await interaction.editReply({
         content: `✅ Собеседование сохранено!\n**Кандидат:** <@${targetId}>\n**Балл:** ${score}\n**Вердикт:** ${status === 'PASS' ? 'ПРОШЕЛ' : 'НЕ ПРОШЕЛ'}`,
         embeds: [],
         components: []
@@ -1371,9 +1406,15 @@ async function finalizeInterview(interaction: ButtonInteraction, targetId: strin
 
 // --- УПРАВЛЕНИЕ ИСТОРИЕЙ ---
 
-async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: string) {
+async function viewInterviewHistory(interaction: any, targetId?: string) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории собеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        await interaction.deferUpdate().catch(() => {});
+    } else {
+        await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ }).catch(() => {});
+    }
+
     const history = await prisma.interview.findMany({
         where: targetId ? { targetId } : {},
         take: 20,
@@ -1388,12 +1429,10 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
 
     if (history.length === 0) {
         embed.setDescription('*Записей не найдено.*');
-        const isComp = interaction.isButton?.() || interaction.isStringSelectMenu?.();
-        const meth = isComp ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-        return (interaction as any)[meth]({ 
+        return interaction.editReply({ 
             embeds: [embed], 
             components: [], 
-            ...(meth !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+            content: null
         });
     }
 
@@ -1424,12 +1463,10 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
 
     components.push(row, new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select));
     
-    const isComponent = (interaction as any).isButton?.() || (interaction as any).isStringSelectMenu?.();
-    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-    await (interaction as any)[method]({ 
+    await interaction.editReply({ 
         embeds: [embed], 
         components, 
-        ...(method !== 'update' ? { flags: 64 } : {}) 
+        content: null
     });
 }
 
@@ -1459,6 +1496,7 @@ async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: str
 }
 
 async function executeDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
+    await interaction.deferUpdate().catch(() => {});
     if (type === 'interview') {
         if (targetId === 'GLOBAL') {
             await prisma.interview.deleteMany({});
@@ -1467,16 +1505,17 @@ async function executeDeleteAllHistory(interaction: ButtonInteraction, type: str
         }
     } else if (type === 'reinterview') {
         await prisma.reInterview.deleteMany({});
-        return interaction.update({ content: '✅ Вся история пересобеседований успешно очищена.', embeds: [], components: [] });
+        return interaction.editReply({ content: '✅ Вся история пересобеседований успешно очищена.', embeds: [], components: [] });
     } else if (type === 'tribune') {
         await prisma.tribuneHistory.deleteMany({});
-        return interaction.update({ content: '✅ Вся история трибун успешно очищена.', embeds: [], components: [] });
+        return interaction.editReply({ content: '✅ Вся история трибун успешно очищена.', embeds: [], components: [] });
     }
 
-    await interaction.update({ content: `✅ История ${type === 'interview' ? 'собеседований' : 'трибун'} успешно очищена.`, embeds: [], components: [] });
+    await interaction.editReply({ content: `✅ История ${type === 'interview' ? 'собеседований' : 'трибун'} успешно очищена.`, embeds: [], components: [] });
 }
 
 async function executeDeleteSingleHistory(interaction: any, type: string, targetId: string, entryId: string) {
+    await interaction.deferUpdate().catch(() => {});
     if (type === 'interview') {
         await prisma.interview.delete({ where: { id: entryId } });
         await viewInterviewHistory(interaction, targetId === 'GLOBAL' ? undefined : targetId);
@@ -1490,7 +1529,13 @@ async function executeDeleteSingleHistory(interaction: any, type: string, target
 }
 
 // Глобальная история трибун
-async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInteraction) {
+async function viewHistory(interaction: any) {
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        await interaction.deferUpdate().catch(() => {});
+    } else {
+        await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ }).catch(() => {});
+    }
+
     const history = await prisma.tribuneHistory.findMany({ 
         take: 15, 
         orderBy: { closedAt: 'desc' },
@@ -1504,12 +1549,10 @@ async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInte
 
     if (history.length === 0) {
         embed.setDescription('*История трибун пуста.*');
-        const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
-        const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-        return (interaction as any)[method]({ 
+        return interaction.editReply({ 
             embeds: [embed], 
-            components: [], 
-            ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+            components: [],
+            content: null
         });
     }
 
@@ -1537,12 +1580,10 @@ async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInte
 
     const components: any[] = [row, new ActionRowBuilder().addComponents(select)];
     
-    const isComponent = interaction.isButton?.() || interaction.isStringSelectMenu?.();
-    const method = isComponent ? 'update' : (interaction.replied || interaction.deferred ? 'editReply' : 'reply');
-    await (interaction as any)[method]({ 
+    await interaction.editReply({ 
         embeds: [embed], 
         components, 
-        ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+        content: null
     });
 }
 
@@ -1673,6 +1714,8 @@ async function renderReInterview(interaction: any, targetId: string, qIdx: numbe
 }
 
 async function finalizeReInterview(interaction: ButtonInteraction, targetId: string, score: number, sIdx: number, status: 'PASS' | 'FAIL') {
+    await interaction.deferUpdate().catch(() => {});
+
     await prisma.reInterview.create({
         data: {
             targetId,
@@ -1682,7 +1725,7 @@ async function finalizeReInterview(interaction: ButtonInteraction, targetId: str
         }
     });
 
-    await interaction.update({
+    await interaction.editReply({
         content: `✅ Пересобеседование сохранено!\n**Кандидат:** <@${targetId}>\n**Балл:** ${score}\n**Вердикт:** ${status === 'PASS' ? 'ПРОШЕЛ' : 'НЕ ПРОШЕЛ'}\n*(Статистика по ситуациям была учтена в процессе)*`,
         embeds: [],
         components: []
