@@ -362,10 +362,12 @@ async function initiateReprimandIssue(interaction: ButtonInteraction) {
 
 
 async function saveReprimand(interaction: ModalSubmitInteraction, targetId: string, reason: string, client: MyClient) {
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
+
     // Проверка, есть ли пользователь на сервере
     const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
     if (!member) {
-        return interaction.reply({ content: '❌ Пользователь не найден на этом сервере!', flags: 64 /* MessageFlags.Ephemeral */ });
+        return interaction.editReply({ content: '❌ Пользователь не найден на этом сервере!' });
     }
 
     const username = member.user.username;
@@ -378,11 +380,11 @@ async function saveReprimand(interaction: ModalSubmitInteraction, targetId: stri
     });
 
     // ВНИМАНИЕ: Если здесь ошибка, запустите npx prisma generate!
-    await (prisma as any).reprimand.create({
+    await prisma.reprimand.create({
         data: { userId: targetId, reason, authorId: interaction.user.id }
     });
 
-    await interaction.reply({ content: `✅ Выговор выдан пользователю <@${targetId}>!`, flags: 64 /* MessageFlags.Ephemeral */ });
+    await interaction.editReply({ content: `✅ Выговор выдан пользователю <@${targetId}>!` });
 
     // Попытка отправить сообщение в личку (не блокирует выполнение из-за catch)
     try {
@@ -410,7 +412,7 @@ async function initiateReprimandRemove(interaction: ButtonInteraction) {
 }
 
 async function showReprimandsToRemove(interaction: ModalSubmitInteraction | StringSelectMenuInteraction, targetId: string) {
-    const reprimands = await (prisma as any).reprimand.findMany({ where: { userId: targetId }, take: 25 });
+    const reprimands = await prisma.reprimand.findMany({ where: { userId: targetId }, take: 25 });
     
     if (reprimands.length === 0) {
         const msg = { content: '❌ У этого пользователя нет активных выговоров в базе.', components: [] };
@@ -433,10 +435,10 @@ async function showReprimandsToRemove(interaction: ModalSubmitInteraction | Stri
 }
 
 async function finalizeReprimandRemove(interaction: StringSelectMenuInteraction, reprimandId: string, client: MyClient) {
-    const reprimand = await (prisma as any).reprimand.findUnique({ where: { id: reprimandId } });
+    const reprimand = await prisma.reprimand.findUnique({ where: { id: reprimandId } });
     if (!reprimand) return interaction.update({ content: 'Выговор не найден.', components: [] });
 
-    await (prisma as any).reprimand.delete({ where: { id: reprimandId } });
+    await prisma.reprimand.delete({ where: { id: reprimandId } });
     await interaction.update({ content: '✅ Выговор успешно снят!', components: [] });
 
     const target = await client.users.fetch(reprimand.userId).catch(() => null);
@@ -446,7 +448,7 @@ async function finalizeReprimandRemove(interaction: StringSelectMenuInteraction,
 }
 
 async function viewMyReprimands(interaction: ButtonInteraction) {
-    const reprimands = await (prisma as any).reprimand.findMany({ where: { userId: interaction.user.id }, orderBy: { createdAt: 'desc' } });
+    const reprimands = await prisma.reprimand.findMany({ where: { userId: interaction.user.id }, orderBy: { createdAt: 'desc' } });
     
     const embed = new EmbedBuilder()
         .setTitle('⚖️ Твои выговоры')
@@ -908,7 +910,7 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
 
         const hostIds = hosts.map(h => h.id);
         
-        const allReprimands = await (prisma as any).reprimand.findMany({
+        const allReprimands = await prisma.reprimand.findMany({
             where: { userId: { in: hostIds } },
             orderBy: { createdAt: 'desc' }
         });
@@ -1013,10 +1015,12 @@ async function chooseReprimandUser(interaction: ButtonInteraction, action: strin
     const guild = interaction.guild;
     if (!guild) return;
 
+    await interaction.deferUpdate();
+
     const hosts = await getHosts(guild);
 
     if (hosts.size === 0) {
-        return interaction.update({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
+        return interaction.editReply({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
     }
 
     const select = new StringSelectMenuBuilder()
@@ -1036,7 +1040,7 @@ async function chooseReprimandUser(interaction: ButtonInteraction, action: strin
         .setDescription('Выберите пользователя из списка:')
         .setColor('#FF4747');
 
-    await interaction.update({ 
+    await interaction.editReply({ 
         embeds: [embed], 
         components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
     });
@@ -1113,10 +1117,12 @@ async function chooseNormaUser(interaction: ButtonInteraction, action: string, t
     const guild = interaction.guild;
     if (!guild) return;
 
+    await interaction.deferUpdate();
+
     const hosts = await getHosts(guild);
 
     if (hosts.size === 0) {
-        return interaction.update({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
+        return interaction.editReply({ content: '❌ Ведущие не найдены.', embeds: [], components: [] });
     }
 
     const select = new StringSelectMenuBuilder()
@@ -1136,7 +1142,7 @@ async function chooseNormaUser(interaction: ButtonInteraction, action: string, t
         .setDescription('Выберите пользователя из списка:')
         .setColor('#5865F2');
 
-    await interaction.update({ 
+    await interaction.editReply({ 
         embeds: [embed], 
         components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)] 
     });
@@ -1347,7 +1353,7 @@ async function renderInterviewResult(interaction: any, targetId: string, score: 
 }
 
 async function finalizeInterview(interaction: ButtonInteraction, targetId: string, score: number, status: 'PASS' | 'FAIL') {
-    await (prisma as any).interview.create({
+    await prisma.interview.create({
         data: {
             targetId,
             interviewerId: interaction.user.id,
@@ -1368,7 +1374,7 @@ async function finalizeInterview(interaction: ButtonInteraction, targetId: strin
 async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: string) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для просмотра истории собеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
-    const history = await (prisma as any).interview.findMany({
+    const history = await prisma.interview.findMany({
         where: targetId ? { targetId } : {},
         take: 20,
         orderBy: { createdAt: 'desc' },
@@ -1423,7 +1429,7 @@ async function viewInterviewHistory(interaction: ButtonInteraction, targetId?: s
     await (interaction as any)[method]({ 
         embeds: [embed], 
         components, 
-        ...(method !== 'update' ? { flags: 64 /* MessageFlags.Ephemeral */ } : {}) 
+        ...(method !== 'update' ? { flags: 64 } : {}) 
     });
 }
 
@@ -1455,15 +1461,15 @@ async function confirmDeleteAllHistory(interaction: ButtonInteraction, type: str
 async function executeDeleteAllHistory(interaction: ButtonInteraction, type: string, targetId: string) {
     if (type === 'interview') {
         if (targetId === 'GLOBAL') {
-            await (prisma as any).interview.deleteMany({});
+            await prisma.interview.deleteMany({});
         } else {
-            await (prisma as any).interview.deleteMany({ where: { targetId } });
+            await prisma.interview.deleteMany({ where: { targetId } });
         }
     } else if (type === 'reinterview') {
-        await (prisma as any).reInterview.deleteMany({});
+        await prisma.reInterview.deleteMany({});
         return interaction.update({ content: '✅ Вся история пересобеседований успешно очищена.', embeds: [], components: [] });
     } else if (type === 'tribune') {
-        await (prisma as any).tribuneHistory.deleteMany({});
+        await prisma.tribuneHistory.deleteMany({});
         return interaction.update({ content: '✅ Вся история трибун успешно очищена.', embeds: [], components: [] });
     }
 
@@ -1472,13 +1478,13 @@ async function executeDeleteAllHistory(interaction: ButtonInteraction, type: str
 
 async function executeDeleteSingleHistory(interaction: any, type: string, targetId: string, entryId: string) {
     if (type === 'interview') {
-        await (prisma as any).interview.delete({ where: { id: entryId } });
+        await prisma.interview.delete({ where: { id: entryId } });
         await viewInterviewHistory(interaction, targetId === 'GLOBAL' ? undefined : targetId);
     } else if (type === 'reinterview') {
-        await (prisma as any).reInterview.delete({ where: { id: entryId } });
+        await prisma.reInterview.delete({ where: { id: entryId } });
         await viewReInterviewHistory(interaction);
     } else if (type === 'tribune') {
-        await (prisma as any).tribuneHistory.delete({ where: { id: entryId } });
+        await prisma.tribuneHistory.delete({ where: { id: entryId } });
         await viewHistory(interaction);
     }
 }
@@ -1545,12 +1551,14 @@ async function viewHistory(interaction: ButtonInteraction | StringSelectMenuInte
 async function startReInterviewSelection(interaction: ButtonInteraction) {
     if (!isStar(interaction.user.id)) return interaction.reply({ content: '❌ У вас нет прав для проведения пересобеседований.', flags: 64 /* MessageFlags.Ephemeral */ });
     
+    await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
+    
     const guild = interaction.guild;
     if (!guild) return;
     const hosts = await getHosts(guild);
     
     if (hosts.size === 0) {
-        return interaction.reply({ content: '❌ Ведущие не найдены.', flags: 64 /* MessageFlags.Ephemeral */ });
+        return interaction.editReply({ content: '❌ Ведущие не найдены.' });
     }
 
     const select = new StringSelectMenuBuilder()
@@ -1565,10 +1573,9 @@ async function startReInterviewSelection(interaction: ButtonInteraction) {
             )
         );
 
-    await interaction.reply({ 
+    await interaction.editReply({ 
         content: '🎙️ **Пересобеседование ведущего**\nВыберите пользователя из официального списка ведущих:', 
-        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
-        flags: 64 /* MessageFlags.Ephemeral */ 
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)]
     });
 }
 
@@ -1666,7 +1673,7 @@ async function renderReInterview(interaction: any, targetId: string, qIdx: numbe
 }
 
 async function finalizeReInterview(interaction: ButtonInteraction, targetId: string, score: number, sIdx: number, status: 'PASS' | 'FAIL') {
-    await (prisma as any).reInterview.create({
+    await prisma.reInterview.create({
         data: {
             targetId,
             interviewerId: interaction.user.id,
@@ -1688,7 +1695,7 @@ async function viewReInterviewHistory(interaction: ButtonInteraction) {
     // Defer reply for history
     await interaction.deferReply({ flags: 64 /* MessageFlags.Ephemeral */ });
 
-    const history = await (prisma as any).reInterview.findMany({
+    const history = await prisma.reInterview.findMany({
         take: 15,
         orderBy: { createdAt: 'desc' },
         include: { target: true }
