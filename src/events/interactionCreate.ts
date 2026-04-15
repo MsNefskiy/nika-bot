@@ -933,8 +933,11 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
         }
 
         // 2. Получаем данные из БД
+        // 2. Получаем данные из БД
         const twoWeeksAgo = new Date();
         twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
         const hostIds = hosts.map(h => h.id);
         
@@ -947,6 +950,22 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
             where: { closedAt: { gte: twoWeeksAgo } },
             orderBy: { closedAt: 'desc' }
         });
+
+        const hostDataFromDb = await prisma.user.findMany({
+            where: { discordId: { in: hostIds } },
+            include: {
+                _count: {
+                    select: {
+                        tiktoks: {
+                            where: { 
+                                status: 'APPROVED',
+                                createdAt: { gte: oneWeekAgo } 
+                            }
+                        }
+                    }
+                }
+            }
+        }) as any[];
 
         // 3. Пагинация (по 5 человек на страницу)
         const itemsPerPage = 5;
@@ -967,8 +986,10 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
                 ? userReprimands.map((r: any) => `• <t:${Math.floor(r.createdAt.getTime() / 1000)}:d> — ${r.reason}`).join('\n')
                 : '*Нет активных выговоров*';
 
+            const dbUser = hostDataFromDb.find(u => u.discordId === id);
+            
+            // --- ТРИБУНЫ ---
             const userTribunes = tribuneHistory.filter(h => h.hostId === id || h.participants?.includes(id));
-            const dbUser = await prisma.user.findUnique({ where: { discordId: id } });
             const manualTribunePass = dbUser?.normaLastUpdated;
             const isManualTribunePass = manualTribunePass ? (new Date().getTime() - manualTribunePass.getTime() < 14 * 24 * 60 * 60 * 1000) : false;
 
@@ -983,7 +1004,14 @@ async function viewDetailedHostList(interaction: ButtonInteraction, page: number
                 ? userTribunes.map(h => `• ${h.type} (<t:${Math.floor(h.closedAt.getTime() / 1000)}:d>)`).slice(0, 5).join('\n') + (userTribunes.length > 5 ? '\n*...и еще другие*' : '')
                 : (isManualTribunePass ? '' : '*Нет проведенных трибун за 14 дней*'))) || '*Нет данных за 14 дней*';
 
-            const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n**🎤 Трибуны (за 2 нед): ${tribuneCount}**\n${tribuneDetails}\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
+            // --- ТИКТОКИ ---
+            const ttCount = dbUser?._count?.tiktoks || 0;
+            const manualTTPass = dbUser?.tiktokNormaLastUpdated;
+            const isManualTTPass = manualTTPass ? (new Date().getTime() - manualTTPass.getTime() < 7 * 24 * 60 * 60 * 1000) : false;
+            const ttStatus = (ttCount > 0 || isManualTTPass) ? '✅ Норма' : '❌ Не выполнено';
+            const ttDetail = isManualTTPass && manualTTPass ? `• Ручное подтверждение (<t:${Math.floor(manualTTPass.getTime() / 1000)}:d>)` : `• Одобрено: **${ttCount}**`;
+
+            const fieldValue = `**⚖️ Выговоры:**\n${reprimandText}\n**🎤 Трибуны (за 2 нед): ${tribuneCount}**\n${tribuneDetails}\n**🎬 Тиктоки (за нед): ${ttStatus}**\n${ttDetail}\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`;
 
             embed.addFields({
                 name: `👤 ${member.displayName} (${member.user.username})`,
