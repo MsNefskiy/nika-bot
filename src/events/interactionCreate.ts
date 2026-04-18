@@ -565,6 +565,7 @@ async function renderTribuneView(interaction: ButtonInteraction) {
         }
         return interaction.reply({ content: 'Активных событий нет.', components: rows, flags: 64 /* MessageFlags.Ephemeral */ });
     }
+    await interaction.deferReply().catch(() => {});
     await updateTribuneMessage(interaction);
 }
 
@@ -591,7 +592,7 @@ async function updateTribuneMessage(interaction: any) {
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (interaction.replied || interaction.deferred) { await interaction.editReply({ files: [attachment], components: rows, content: '' }); } else { await interaction.update({ files: [attachment], components: rows, content: '' }); }
     } else {
-        await interaction.reply({ files: [attachment], components: rows, flags: 64 /* MessageFlags.Ephemeral */ });
+        await interaction.reply({ files: [attachment], components: rows });
     }
 }
 
@@ -631,14 +632,15 @@ async function joinSlot(interaction: ButtonInteraction, slot: string) {
     const isSecondHalf = slot === 'slot2_1' || slot === 'slot2_2';
 
     if (isFirstHalf && (tribune.slot1_1 === interaction.user.id || tribune.slot1_2 === interaction.user.id)) {
-        return interaction.editReply({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', embeds: [], components: [], files: [] });
+        return interaction.followUp({ content: '❌ Вы уже заняли место в первой половине трибуны (1.1 или 1.2).', flags: 64 /* MessageFlags.Ephemeral */ });
     }
     if (isSecondHalf && (tribune.slot2_1 === interaction.user.id || tribune.slot2_2 === interaction.user.id)) {
-        return interaction.editReply({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', embeds: [], components: [], files: [] });
+        return interaction.followUp({ content: '❌ Вы уже заняли место во второй половине трибуны (2.1 или 2.2).', flags: 64 /* MessageFlags.Ephemeral */ });
     }
 
     await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: interaction.user.id } });
     await updateTribuneMessage(interaction);
+    await interaction.followUp({ content: '✅ Вы успешно записались на трибуну!', flags: 64 /* MessageFlags.Ephemeral */ }).catch(() => {});
 }
 
 async function handleLeaveRequest(interaction: ButtonInteraction) {
@@ -655,6 +657,7 @@ async function leaveSpecificSlot(interaction: any, slot: string) {
     if (!tribune) return;
     await (prisma.tribune as any).update({ where: { id: tribune.id }, data: { [slot]: null } });
     await updateTribuneMessage(interaction);
+    await interaction.followUp({ content: '✅ Вы успешно выписались с трибуны!', flags: 64 /* MessageFlags.Ephemeral */ }).catch(() => {});
 }
 
 async function cancelTribune(interaction: ButtonInteraction) {
