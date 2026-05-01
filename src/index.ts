@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import * as dotenv from 'dotenv';
 import { loadEvents } from './handlers/eventHandler';
 import { loadCommands } from './handlers/commandHandler';
+import { startDbHeartbeat } from './handlers/db';
 import { MyClient } from './types';
 import http from 'http';
 
@@ -27,6 +28,7 @@ const client = new MyClient({
 
 client.once('ready', async () => {
     console.log(`✅ Бот ${client.user?.tag} запущен!`);
+    startDbHeartbeat();
     
     // Проверяем флаг --deploy для регистрации команд
     const shouldDeploy = process.argv.includes('--deploy');
